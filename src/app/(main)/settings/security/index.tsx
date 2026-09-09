@@ -6,7 +6,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import {
 
 import { useSecurityStore } from "@/store/security.store";
 import { COLORS, fonts, fontSizes } from "@/utils/styles";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface PasswordFieldProps {
   icon: keyof typeof Ionicons.glyphMap;

@@ -95,7 +95,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
   {
     label: "Matières premières",
-    value: "/settings/raw-materials",
+    value: "/settings/raw-material",
     description: "Gérer les fruits, ingrédients et autres matières premières",
     icon: "package",
     section: "inventory",

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
+import type { Employee } from "@/types/employee";
 import type { PointOfSale } from "@/types/point-of-sale";
 
 import { COLORS, fonts } from "@/utils/styles";
@@ -9,10 +10,27 @@ import PointOfSaleStaffAssignment from "./PointOfSaleStaffAssignment";
 
 interface PointOfSaleCardProps {
   pointOfSale: PointOfSale;
+  employees: Employee[];
+
+  isAssigningStaff?: boolean;
+  isRemovingStaff?: boolean;
 
   onEdit: (pointOfSale: PointOfSale) => void;
 
   onDelete: (pointOfSale: PointOfSale) => void;
+
+  onAssignEmployee: (
+    pointOfSaleId: string,
+    employeeId: string,
+  ) => Promise<void>;
+
+  onRemoveEmployee: (
+    pointOfSaleId: string,
+    employeeId: string,
+    employeeName: string,
+  ) => Promise<void>;
+
+  onAddEmployee?: () => void;
 }
 
 const formatNumber = (value: number): string => {
@@ -30,8 +48,14 @@ const getInitials = (name: string): string => {
 
 export default function PointOfSaleCard({
   pointOfSale,
+  employees,
+  isAssigningStaff = false,
+  isRemovingStaff = false,
   onEdit,
   onDelete,
+  onAssignEmployee,
+  onRemoveEmployee,
+  onAddEmployee,
 }: PointOfSaleCardProps) {
   const activeStaff = pointOfSale.staffAssignments.filter(
     (assignment) => assignment.isActive && assignment.user.isActive,
@@ -127,25 +151,27 @@ export default function PointOfSaleCard({
       {/* INFORMATIONS */}
       {/* ================================================== */}
 
-      <View style={styles.infoContainer}>
-        {pointOfSale.address ? (
-          <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={17} color={COLORS.Gray} />
+      {(pointOfSale.address || pointOfSale.telephone) && (
+        <View style={styles.infoContainer}>
+          {pointOfSale.address ? (
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={17} color={COLORS.Gray} />
 
-            <Text style={styles.infoText} numberOfLines={2}>
-              {pointOfSale.address}
-            </Text>
-          </View>
-        ) : null}
+              <Text style={styles.infoText} numberOfLines={2}>
+                {pointOfSale.address}
+              </Text>
+            </View>
+          ) : null}
 
-        {pointOfSale.telephone ? (
-          <View style={styles.infoRow}>
-            <Ionicons name="call-outline" size={17} color={COLORS.Gray} />
+          {pointOfSale.telephone ? (
+            <View style={styles.infoRow}>
+              <Ionicons name="call-outline" size={17} color={COLORS.Gray} />
 
-            <Text style={styles.infoText}>{pointOfSale.telephone}</Text>
-          </View>
-        ) : null}
-      </View>
+              <Text style={styles.infoText}>{pointOfSale.telephone}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
 
       {/* ================================================== */}
       {/* STATISTIQUES */}
@@ -237,7 +263,18 @@ export default function PointOfSaleCard({
         </View>
 
         <PointOfSaleStaffAssignment
+          pointOfSale={pointOfSale}
           staffAssignments={pointOfSale.staffAssignments}
+          employees={employees}
+          isAssigning={isAssigningStaff}
+          isRemoving={isRemovingStaff}
+          onAssign={(employeeId) =>
+            onAssignEmployee(pointOfSale.id, employeeId)
+          }
+          onRemove={(employeeId, employeeName) =>
+            onRemoveEmployee(pointOfSale.id, employeeId, employeeName)
+          }
+          onAddEmployee={onAddEmployee}
         />
       </View>
 
@@ -278,7 +315,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 18,
     marginBottom: 16,
-
     shadowColor: COLORS.black,
     shadowOffset: {
       width: 0,

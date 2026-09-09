@@ -25,23 +25,32 @@ interface PointOfSaleState {
   isRefreshing: boolean;
   isSaving: boolean;
   isDeleting: boolean;
+  isAssigningStaff: boolean;
+  isRemovingStaff: boolean;
 
   isOffline: boolean;
   error: string | null;
 
   fetchPointOfSales: () => Promise<void>;
   refreshPointOfSales: () => Promise<void>;
-
   getPointOfSale: (id: string) => Promise<PointOfSale | null>;
-
   createPointOfSale: (data: CreatePointOfSalePayload) => Promise<PointOfSale>;
-
   updatePointOfSale: (
     id: string,
     data: UpdatePointOfSalePayload,
   ) => Promise<PointOfSale>;
 
   deletePointOfSale: (id: string) => Promise<void>;
+
+  assignEmployeeToPointOfSale: (
+    pointOfSaleId: string,
+    employeeId: string,
+  ) => Promise<PointOfSale>;
+
+  removeEmployeeFromPointOfSale: (
+    pointOfSaleId: string,
+    employeeId: string,
+  ) => Promise<PointOfSale>;
 
   setSelectedPointOfSale: (pointOfSale: PointOfSale | null) => void;
 
@@ -124,6 +133,8 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
   isRefreshing: false,
   isSaving: false,
   isDeleting: false,
+  isAssigningStaff: false,
+  isRemovingStaff: false,
 
   isOffline: false,
   error: null,
@@ -174,7 +185,6 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
 
       set({
         pointOfSales: result.pointOfSales,
-
         isLoading: false,
         isOffline: false,
         error: null,
@@ -189,7 +199,6 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
       if (cachedPointOfSales.length > 0) {
         set({
           pointOfSales: cachedPointOfSales,
-
           isLoading: false,
           isOffline: true,
           error: null,
@@ -242,7 +251,6 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
 
       set({
         pointOfSales: result.pointOfSales,
-
         isRefreshing: false,
         isOffline: false,
         error: null,
@@ -257,7 +265,6 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
       if (cachedPointOfSales.length > 0) {
         set({
           pointOfSales: cachedPointOfSales,
-
           isRefreshing: false,
           isOffline: true,
           error: null,
@@ -311,10 +318,9 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
 
       set({
         pointOfSales: updatedPointOfSales,
-
         selectedPointOfSale: updatedPointOfSale,
-
         isOffline: false,
+        error: null,
       });
 
       return updatedPointOfSale;
@@ -322,7 +328,6 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
       if (localPointOfSale) {
         set({
           selectedPointOfSale: localPointOfSale,
-
           isOffline: true,
         });
 
@@ -365,9 +370,7 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
 
       set({
         pointOfSales: updatedPointOfSales,
-
         selectedPointOfSale: pointOfSale,
-
         isSaving: false,
         isOffline: false,
         error: null,
@@ -423,9 +426,7 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
 
       set({
         pointOfSales: updatedPointOfSales,
-
         selectedPointOfSale: pointOfSale,
-
         isSaving: false,
         isOffline: false,
         error: null,
@@ -504,6 +505,153 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
   },
 
   // ========================================================
+  // AFFECTER UN EMPLOYÉ À UN POINT DE VENTE
+  // ========================================================
+
+  assignEmployeeToPointOfSale: async (pointOfSaleId, employeeId) => {
+    try {
+      set({
+        isAssigningStaff: true,
+        error: null,
+      });
+
+      const response = await api.patch<PointOfSaleResponse>(
+        `/point-of-sale/${pointOfSaleId}/staff`,
+        {
+          employeeId,
+        },
+      );
+
+      const result = response.data;
+
+      if (!result.success || !result.pointOfSale) {
+        throw new Error(result.message || "Impossible d'affecter l'employé.");
+      }
+
+      const pointOfSale = result.pointOfSale;
+
+      // ----------------------------------------------------
+      // Mettre à jour le POS dans le store
+      // ----------------------------------------------------
+
+      const updatedPointOfSales = get().pointOfSales.map((item) =>
+        item.id === pointOfSaleId ? pointOfSale : item,
+      );
+
+      // ----------------------------------------------------
+      // Sauvegarder dans le cache
+      // ----------------------------------------------------
+
+      await saveCache(updatedPointOfSales);
+
+      // ----------------------------------------------------
+      // Mettre à jour le POS sélectionné
+      // ----------------------------------------------------
+
+      const selectedPointOfSale = get().selectedPointOfSale;
+
+      set({
+        pointOfSales: updatedPointOfSales,
+
+        selectedPointOfSale:
+          selectedPointOfSale?.id === pointOfSaleId
+            ? pointOfSale
+            : selectedPointOfSale,
+
+        isAssigningStaff: false,
+        isOffline: false,
+        error: null,
+      });
+
+      return pointOfSale;
+    } catch (error) {
+      const message = getErrorMessage(
+        error,
+        "Impossible d'affecter l'employé.",
+      );
+
+      set({
+        isAssigningStaff: false,
+        error: message,
+      });
+
+      throw error;
+    }
+  },
+
+  // ========================================================
+  // RETIRER UN EMPLOYÉ D'UN POINT DE VENTE
+  // ========================================================
+
+  removeEmployeeFromPointOfSale: async (pointOfSaleId, employeeId) => {
+    try {
+      set({
+        isRemovingStaff: true,
+        error: null,
+      });
+
+      const response = await api.delete<PointOfSaleResponse>(
+        `/point-of-sale/${pointOfSaleId}/staff/${employeeId}`,
+      );
+
+      const result = response.data;
+
+      if (!result.success || !result.pointOfSale) {
+        throw new Error(result.message || "Impossible de retirer l'employé.");
+      }
+
+      const pointOfSale = result.pointOfSale;
+
+      // ----------------------------------------------------
+      // Mettre à jour le POS dans le store
+      // ----------------------------------------------------
+
+      const updatedPointOfSales = get().pointOfSales.map((item) =>
+        item.id === pointOfSaleId ? pointOfSale : item,
+      );
+
+      // ----------------------------------------------------
+      // Sauvegarder dans le cache
+      // ----------------------------------------------------
+
+      await saveCache(updatedPointOfSales);
+
+      // ----------------------------------------------------
+      // Mettre à jour le POS sélectionné
+      // ----------------------------------------------------
+
+      const selectedPointOfSale = get().selectedPointOfSale;
+
+      set({
+        pointOfSales: updatedPointOfSales,
+
+        selectedPointOfSale:
+          selectedPointOfSale?.id === pointOfSaleId
+            ? pointOfSale
+            : selectedPointOfSale,
+
+        isRemovingStaff: false,
+        isOffline: false,
+        error: null,
+      });
+
+      return pointOfSale;
+    } catch (error) {
+      const message = getErrorMessage(
+        error,
+        "Impossible de retirer l'employé.",
+      );
+
+      set({
+        isRemovingStaff: false,
+        error: message,
+      });
+
+      throw error;
+    }
+  },
+
+  // ========================================================
   // POINT DE VENTE SÉLECTIONNÉ
   // ========================================================
 
@@ -538,6 +686,8 @@ export const usePointOfSaleStore = create<PointOfSaleState>((set, get) => ({
       isRefreshing: false,
       isSaving: false,
       isDeleting: false,
+      isAssigningStaff: false,
+      isRemovingStaff: false,
 
       isOffline: false,
       error: null,

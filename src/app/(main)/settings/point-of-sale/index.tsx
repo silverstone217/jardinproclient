@@ -11,18 +11,19 @@ import {
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import PointOfSaleCard from "@/components/point-of-sale/PointOfSaleCard";
 import PointOfSaleEmpty from "@/components/point-of-sale/PointOfSaleEmpty";
 import PointOfSaleForm from "@/components/point-of-sale/PointOfSaleForm";
 import PointOfSaleHeader from "@/components/point-of-sale/PointOfSaleHeader";
 
+import { useEmployeeStore } from "@/store/employee.store";
 import { usePointOfSaleStore } from "@/store/pointOfSale.store";
 
 import type { PointOfSale, PointOfSaleFormData } from "@/types/point-of-sale";
 
 import { COLORS, fonts } from "@/utils/styles";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 // ============================================================
 // ÉCRAN POINTS DE VENTE
@@ -35,6 +36,8 @@ export default function PointOfSaleScreen() {
     isRefreshing,
     isSaving,
     isDeleting,
+    isAssigningStaff,
+    isRemovingStaff,
     error,
 
     fetchPointOfSales,
@@ -42,8 +45,14 @@ export default function PointOfSaleScreen() {
     createPointOfSale,
     updatePointOfSale,
     deletePointOfSale,
+
+    assignEmployeeToPointOfSale,
+    removeEmployeeFromPointOfSale,
+
     clearError,
   } = usePointOfSaleStore();
+
+  const { employees, fetchEmployees } = useEmployeeStore();
 
   // ==========================================================
   // ÉTAT DU FORMULAIRE
@@ -66,11 +75,10 @@ export default function PointOfSaleScreen() {
 
       const load = async () => {
         try {
-          await fetchPointOfSales();
+          await Promise.all([fetchPointOfSales(), fetchEmployees()]);
         } catch {
-          // Le store gère déjà le cache et l'erreur.
-          // Rien à afficher ici si des données locales
-          // sont disponibles.
+          // Les stores gèrent eux-mêmes le cache
+          // et les erreurs.
         }
 
         if (!mounted) {
@@ -83,17 +91,28 @@ export default function PointOfSaleScreen() {
       return () => {
         mounted = false;
       };
-    }, [fetchPointOfSales]),
+    }, [fetchPointOfSales, fetchEmployees]),
   );
 
-  // RECHERCHE
+  // ==========================================================
+  // STATISTIQUES
+  // ==========================================================
+
+  const activeCount = useMemo(() => {
+    return pointOfSales.filter((pointOfSale) => pointOfSale.isActive).length;
+  }, [pointOfSales]);
+
   const inactiveCount = useMemo(() => {
     return pointOfSales.filter((pointOfSale) => !pointOfSale.isActive).length;
   }, [pointOfSales]);
 
   const mainStoreCount = useMemo(() => {
     return pointOfSales.filter((pointOfSale) => pointOfSale.isMainStore).length;
-  }, []);
+  }, [pointOfSales]);
+
+  // ==========================================================
+  // RECHERCHE
+  // ==========================================================
 
   const filteredPointOfSales = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -112,14 +131,6 @@ export default function PointOfSaleScreen() {
       );
     });
   }, [pointOfSales, searchQuery]);
-
-  // ==========================================================
-  // STATISTIQUES
-  // ==========================================================
-
-  const activeCount = useMemo(() => {
-    return pointOfSales.filter((pointOfSale) => pointOfSale.isActive).length;
-  }, [pointOfSales]);
 
   // ==========================================================
   // OUVRIR LE FORMULAIRE
@@ -201,8 +212,7 @@ export default function PointOfSaleScreen() {
           "Le nouveau point de vente a été ajouté avec succès.",
         );
       } catch {
-        // Le message d'erreur est conservé
-        // dans le store et affiché par le formulaire.
+        // Le formulaire affiche l'erreur du store.
       }
     },
     [clearError, createPointOfSale, editingPointOfSale, updatePointOfSale],
@@ -226,8 +236,6 @@ export default function PointOfSaleScreen() {
           `« ${pointOfSale.name} » a été supprimé avec succès.`,
         );
       } catch {
-        // Le store contient déjà le message
-        // d'erreur provenant du serveur.
         Alert.alert(
           "Suppression impossible",
           usePointOfSaleStore.getState().error ||
@@ -239,17 +247,98 @@ export default function PointOfSaleScreen() {
   );
 
   // ==========================================================
+  // AFFECTER UN EMPLOYÉ
+  // ==========================================================
+
+  const handleAssignEmployee = useCallback(
+    async (pointOfSaleId: string, employeeId: string) => {
+      try {
+        await assignEmployeeToPointOfSale(pointOfSaleId, employeeId);
+
+        // On rafraîchit également la liste des employés.
+        // Cela permet de retirer immédiatement l'employé
+        // de la liste des employés disponibles.
+        try {
+          await fetchEmployees();
+        } catch {
+          // Le POS est déjà correctement mis à jour.
+        }
+
+        Alert.alert(
+          "Employé affecté",
+          "L'employé a été affecté avec succès à ce point de vente.",
+        );
+      } catch {
+        Alert.alert(
+          "Affectation impossible",
+          usePointOfSaleStore.getState().error ||
+            "Impossible d'affecter cet employé.",
+        );
+
+        throw new Error("EMPLOYEE_ASSIGNMENT_FAILED");
+      }
+    },
+    [assignEmployeeToPointOfSale, fetchEmployees],
+  );
+
+  // ==========================================================
+  // RETIRER UN EMPLOYÉ
+  // ==========================================================
+
+  const handleRemoveEmployee = useCallback(
+    async (pointOfSaleId: string, employeeId: string, employeeName: string) => {
+      if (isRemovingStaff) {
+        return;
+      }
+
+      try {
+        await removeEmployeeFromPointOfSale(pointOfSaleId, employeeId);
+
+        try {
+          await fetchEmployees();
+        } catch {
+          // Le POS est déjà correctement mis à jour.
+        }
+
+        Alert.alert(
+          "Employé retiré",
+          `« ${employeeName} » n'est plus affecté à ce point de vente.`,
+        );
+      } catch {
+        Alert.alert(
+          "Retrait impossible",
+          usePointOfSaleStore.getState().error ||
+            "Impossible de retirer cet employé.",
+        );
+
+        throw new Error("EMPLOYEE_REMOVAL_FAILED");
+      }
+    },
+    [fetchEmployees, isRemovingStaff, removeEmployeeFromPointOfSale],
+  );
+
+  // ==========================================================
   // RAFRAÎCHIR
   // ==========================================================
 
   const handleRefresh = useCallback(async () => {
     try {
-      await refreshPointOfSales();
+      await Promise.all([refreshPointOfSales(), fetchEmployees()]);
     } catch {
-      // En cas d'absence de connexion,
-      // le cache reste affiché silencieusement.
+      // Le cache reste affiché silencieusement.
     }
-  }, [refreshPointOfSales]);
+  }, [fetchEmployees, refreshPointOfSales]);
+
+  // ==========================================================
+  // AJOUTER UN EMPLOYÉ
+  // ==========================================================
+
+  const handleAddEmployee = useCallback(() => {
+    Alert.alert(
+      "Ajouter un employé",
+      "Utilisez la section « Personnel » pour créer un nouvel employé.",
+    );
+  }, []);
 
   // ==========================================================
   // RENDU D'UN POINT DE VENTE
@@ -259,11 +348,26 @@ export default function PointOfSaleScreen() {
     ({ item }: { item: PointOfSale }) => (
       <PointOfSaleCard
         pointOfSale={item}
+        employees={employees}
+        isAssigningStaff={isAssigningStaff}
+        isRemovingStaff={isRemovingStaff}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onAssignEmployee={handleAssignEmployee}
+        onRemoveEmployee={handleRemoveEmployee}
+        onAddEmployee={handleAddEmployee}
       />
     ),
-    [handleEdit, handleDelete],
+    [
+      employees,
+      handleAddEmployee,
+      handleAssignEmployee,
+      handleEdit,
+      handleDelete,
+      handleRemoveEmployee,
+      isAssigningStaff,
+      isRemovingStaff,
+    ],
   );
 
   // ==========================================================
@@ -327,8 +431,8 @@ export default function PointOfSaleScreen() {
           style={styles.retryButton}
           onPress={() => {
             clearError();
-
             fetchPointOfSales().catch(() => {});
+            fetchEmployees().catch(() => {});
           }}
         >
           Réessayer
@@ -536,7 +640,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  //
+  // ==========================================================
+  // RECHERCHE VIDE
+  // ==========================================================
+
   noSearchResult: {
     alignItems: "center",
     justifyContent: "center",
