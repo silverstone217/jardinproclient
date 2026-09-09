@@ -53,7 +53,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
 
   {
     label: "Points de vente",
-    value: "/settings/points-of-sale",
+    value: "/settings/point-of-sale",
     description: "Gérer les points de vente et leurs affectations",
     icon: "map-pin",
     section: "business",

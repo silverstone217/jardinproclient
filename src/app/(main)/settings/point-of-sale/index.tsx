@@ -1,0 +1,598 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Keyboard,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+import PointOfSaleCard from "@/components/point-of-sale/PointOfSaleCard";
+import PointOfSaleEmpty from "@/components/point-of-sale/PointOfSaleEmpty";
+import PointOfSaleForm from "@/components/point-of-sale/PointOfSaleForm";
+import PointOfSaleHeader from "@/components/point-of-sale/PointOfSaleHeader";
+
+import { usePointOfSaleStore } from "@/store/pointOfSale.store";
+
+import type { PointOfSale, PointOfSaleFormData } from "@/types/point-of-sale";
+
+import { COLORS, fonts } from "@/utils/styles";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+// ============================================================
+// ÉCRAN POINTS DE VENTE
+// ============================================================
+
+export default function PointOfSaleScreen() {
+  const {
+    pointOfSales,
+    isLoading,
+    isRefreshing,
+    isSaving,
+    isDeleting,
+    error,
+
+    fetchPointOfSales,
+    refreshPointOfSales,
+    createPointOfSale,
+    updatePointOfSale,
+    deletePointOfSale,
+    clearError,
+  } = usePointOfSaleStore();
+
+  // ==========================================================
+  // ÉTAT DU FORMULAIRE
+  // ==========================================================
+
+  const [isFormVisible, setIsFormVisible] = useState(false);
+
+  const [editingPointOfSale, setEditingPointOfSale] =
+    useState<PointOfSale | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // ==========================================================
+  // CHARGEMENT
+  // ==========================================================
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+
+      const load = async () => {
+        try {
+          await fetchPointOfSales();
+        } catch {
+          // Le store gère déjà le cache et l'erreur.
+          // Rien à afficher ici si des données locales
+          // sont disponibles.
+        }
+
+        if (!mounted) {
+          return;
+        }
+      };
+
+      load();
+
+      return () => {
+        mounted = false;
+      };
+    }, [fetchPointOfSales]),
+  );
+
+  // RECHERCHE
+  const inactiveCount = useMemo(() => {
+    return pointOfSales.filter((pointOfSale) => !pointOfSale.isActive).length;
+  }, [pointOfSales]);
+
+  const mainStoreCount = useMemo(() => {
+    return pointOfSales.filter((pointOfSale) => pointOfSale.isMainStore).length;
+  }, []);
+
+  const filteredPointOfSales = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return pointOfSales;
+    }
+
+    return pointOfSales.filter((pointOfSale) => {
+      const name = pointOfSale.name.toLowerCase();
+      const code = pointOfSale.code.toLowerCase();
+      const address = pointOfSale.address?.toLowerCase() ?? "";
+
+      return (
+        name.includes(query) || code.includes(query) || address.includes(query)
+      );
+    });
+  }, [pointOfSales, searchQuery]);
+
+  // ==========================================================
+  // STATISTIQUES
+  // ==========================================================
+
+  const activeCount = useMemo(() => {
+    return pointOfSales.filter((pointOfSale) => pointOfSale.isActive).length;
+  }, [pointOfSales]);
+
+  // ==========================================================
+  // OUVRIR LE FORMULAIRE
+  // ==========================================================
+
+  const handleAdd = useCallback(() => {
+    clearError();
+    setEditingPointOfSale(null);
+    setIsFormVisible(true);
+  }, [clearError]);
+
+  const handleEdit = useCallback(
+    (pointOfSale: PointOfSale) => {
+      clearError();
+      setEditingPointOfSale(pointOfSale);
+      setIsFormVisible(true);
+    },
+    [clearError],
+  );
+
+  // ==========================================================
+  // FERMER LE FORMULAIRE
+  // ==========================================================
+
+  const handleCloseForm = useCallback(() => {
+    if (isSaving) {
+      return;
+    }
+
+    clearError();
+    setIsFormVisible(false);
+    setEditingPointOfSale(null);
+  }, [clearError, isSaving]);
+
+  // ==========================================================
+  // CRÉER / MODIFIER
+  // ==========================================================
+
+  const handleSubmit = useCallback(
+    async (data: PointOfSaleFormData) => {
+      try {
+        clearError();
+
+        if (editingPointOfSale) {
+          await updatePointOfSale(editingPointOfSale.id, {
+            name: data.name,
+            code: data.code,
+            telephone: data.telephone,
+            address: data.address,
+            isMainStore: data.isMainStore,
+            isActive: data.isActive,
+          });
+
+          setIsFormVisible(false);
+          setEditingPointOfSale(null);
+
+          Alert.alert(
+            "Point de vente modifié",
+            "Les informations du point de vente ont été mises à jour.",
+          );
+
+          return;
+        }
+
+        await createPointOfSale({
+          name: data.name,
+          code: data.code,
+          telephone: data.telephone,
+          address: data.address,
+          isMainStore: data.isMainStore,
+          isActive: data.isActive,
+        });
+
+        setIsFormVisible(false);
+        setEditingPointOfSale(null);
+
+        Alert.alert(
+          "Point de vente créé",
+          "Le nouveau point de vente a été ajouté avec succès.",
+        );
+      } catch {
+        // Le message d'erreur est conservé
+        // dans le store et affiché par le formulaire.
+      }
+    },
+    [clearError, createPointOfSale, editingPointOfSale, updatePointOfSale],
+  );
+
+  // ==========================================================
+  // SUPPRIMER
+  // ==========================================================
+
+  const handleDelete = useCallback(
+    async (pointOfSale: PointOfSale) => {
+      if (isDeleting) {
+        return;
+      }
+
+      try {
+        await deletePointOfSale(pointOfSale.id);
+
+        Alert.alert(
+          "Point de vente supprimé",
+          `« ${pointOfSale.name} » a été supprimé avec succès.`,
+        );
+      } catch {
+        // Le store contient déjà le message
+        // d'erreur provenant du serveur.
+        Alert.alert(
+          "Suppression impossible",
+          usePointOfSaleStore.getState().error ||
+            "Impossible de supprimer ce point de vente.",
+        );
+      }
+    },
+    [deletePointOfSale, isDeleting],
+  );
+
+  // ==========================================================
+  // RAFRAÎCHIR
+  // ==========================================================
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      await refreshPointOfSales();
+    } catch {
+      // En cas d'absence de connexion,
+      // le cache reste affiché silencieusement.
+    }
+  }, [refreshPointOfSales]);
+
+  // ==========================================================
+  // RENDU D'UN POINT DE VENTE
+  // ==========================================================
+
+  const renderPointOfSale = useCallback(
+    ({ item }: { item: PointOfSale }) => (
+      <PointOfSaleCard
+        pointOfSale={item}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+      />
+    ),
+    [handleEdit, handleDelete],
+  );
+
+  // ==========================================================
+  // KEY EXTRACTOR
+  // ==========================================================
+
+  const keyExtractor = useCallback((item: PointOfSale) => item.id, []);
+
+  // ==========================================================
+  // ÉTAT DE CHARGEMENT INITIAL
+  // ==========================================================
+
+  if (isLoading && pointOfSales.length === 0) {
+    return (
+      <View style={styles.loadingScreen}>
+        <View style={styles.loadingIcon}>
+          <Ionicons
+            name="storefront-outline"
+            size={28}
+            color={COLORS.primary}
+          />
+        </View>
+
+        <ActivityIndicator
+          size="small"
+          color={COLORS.primary}
+          style={styles.loader}
+        />
+
+        <Text style={styles.loadingTitle}>Chargement des points de vente</Text>
+
+        <Text style={styles.loadingDescription}>
+          Préparation de votre espace de gestion...
+        </Text>
+      </View>
+    );
+  }
+
+  // ==========================================================
+  // ERREUR SANS DONNÉES
+  // ==========================================================
+
+  if (error && pointOfSales.length === 0) {
+    return (
+      <View style={styles.errorScreen}>
+        <View style={styles.errorIcon}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={30}
+            color={COLORS.error}
+          />
+        </View>
+
+        <Text style={styles.errorTitle}>
+          Impossible de charger les points de vente
+        </Text>
+
+        <Text style={styles.errorDescription}>{error}</Text>
+
+        <Text
+          style={styles.retryButton}
+          onPress={() => {
+            clearError();
+
+            fetchPointOfSales().catch(() => {});
+          }}
+        >
+          Réessayer
+        </Text>
+      </View>
+    );
+  }
+
+  // ==========================================================
+  // ÉCRAN PRINCIPAL
+  // ==========================================================
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <FlatList
+        data={filteredPointOfSales}
+        keyExtractor={keyExtractor}
+        renderItem={renderPointOfSale}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={Keyboard.dismiss}
+        contentContainerStyle={[
+          styles.contentContainer,
+          filteredPointOfSales.length === 0 && styles.emptyContentContainer,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+        ListHeaderComponent={
+          <PointOfSaleHeader
+            total={pointOfSales.length}
+            active={activeCount}
+            inactive={inactiveCount}
+            mainStore={mainStoreCount}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onAdd={handleAdd}
+          />
+        }
+        ListEmptyComponent={
+          searchQuery.trim().length > 0 ? (
+            <View style={styles.noSearchResult}>
+              <View style={styles.noSearchIcon}>
+                <Ionicons name="search-outline" size={30} color={COLORS.Gray} />
+              </View>
+
+              <Text style={styles.noSearchTitle}>Aucun résultat</Text>
+
+              <Text style={styles.noSearchDescription}>
+                Aucun point de vente ne correspond à « {searchQuery.trim()} ».
+              </Text>
+            </View>
+          ) : (
+            <PointOfSaleEmpty onAdd={handleAdd} />
+          )
+        }
+        ListFooterComponent={
+          filteredPointOfSales.length > 0 ? (
+            <View style={styles.footer}>
+              <View style={styles.footerIcon}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={15}
+                  color={COLORS.Gray}
+                />
+              </View>
+
+              <Text style={styles.footerText}>
+                Les points de vente permettent de suivre séparément les stocks,
+                ventes et activités de chaque espace.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+
+      <PointOfSaleForm
+        visible={isFormVisible}
+        pointOfSale={editingPointOfSale}
+        isSaving={isSaving}
+        error={error}
+        onClose={handleCloseForm}
+        onSubmit={handleSubmit}
+      />
+    </SafeAreaView>
+  );
+}
+
+// ============================================================
+// STYLES
+// ============================================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    paddingBottom: 30,
+  },
+
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
+
+  emptyContentContainer: {
+    flexGrow: 1,
+  },
+
+  // ==========================================================
+  // LOADING
+  // ==========================================================
+
+  loadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    backgroundColor: COLORS.background,
+  },
+
+  loadingIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E8F2E5",
+  },
+
+  loader: {
+    marginTop: 20,
+  },
+
+  loadingTitle: {
+    marginTop: 14,
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  loadingDescription: {
+    marginTop: 5,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: COLORS.Gray,
+    textAlign: "center",
+  },
+
+  // ==========================================================
+  // ERREUR
+  // ==========================================================
+
+  errorScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    backgroundColor: COLORS.background,
+  },
+
+  errorIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FDECEC",
+  },
+
+  errorTitle: {
+    marginTop: 16,
+    fontFamily: fonts.bold,
+    fontSize: 17,
+    lineHeight: 23,
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  errorDescription: {
+    marginTop: 8,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 19,
+    color: COLORS.Gray,
+    textAlign: "center",
+  },
+
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: COLORS.primary,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: COLORS.white,
+    textAlign: "center",
+  },
+
+  //
+  noSearchResult: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 30,
+    paddingTop: 55,
+    paddingBottom: 40,
+  },
+
+  noSearchIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#EEEEEA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  noSearchTitle: {
+    marginTop: 16,
+    fontFamily: fonts.bold,
+    fontSize: 17,
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  noSearchDescription: {
+    marginTop: 7,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.Gray,
+    textAlign: "center",
+  },
+
+  // ==========================================================
+  // FOOTER
+  // ==========================================================
+
+  footer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+
+  footerIcon: {
+    marginTop: 1,
+    marginRight: 7,
+  },
+
+  footerText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    lineHeight: 16,
+    color: COLORS.Gray,
+  },
+});
