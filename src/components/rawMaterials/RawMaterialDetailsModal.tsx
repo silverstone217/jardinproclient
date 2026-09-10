@@ -1,8 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import React from "react";
+
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +16,6 @@ import {
 } from "react-native";
 
 import type { RawIngredient } from "@/types/raw-ingredient";
-
 import { COLORS, fonts } from "@/utils/styles";
 
 interface RawMaterialDetailsModalProps {
@@ -52,9 +55,11 @@ const formatQuantity = (quantity: number) => {
 export function RawMaterialDetailsModal({
   visible,
   ingredient,
+
   isAdjustingStock = false,
   isDeleting = false,
   isUpdating = false,
+
   onClose,
   onEdit,
   onAdjustStock,
@@ -65,10 +70,17 @@ export function RawMaterialDetailsModal({
 
   const [note, setNote] = React.useState("");
 
+  /**
+   * true  = réduction
+   * false = ajout
+   */
+  const [isReduction, setIsReduction] = React.useState(false);
+
   React.useEffect(() => {
     if (!visible) {
       setAdjustment("");
       setNote("");
+      setIsReduction(false);
     }
   }, [visible]);
 
@@ -80,12 +92,25 @@ export function RawMaterialDetailsModal({
 
   const unit = UNIT_LABELS[ingredient.unit];
 
-  const parsedAdjustment = Number(adjustment.replace(",", "."));
+  /**
+   * On nettoie la valeur avant de la convertir.
+   *
+   * Exemple :
+   * "12,5" -> 12.5
+   * "12.5" -> 12.5
+   */
+  const normalizedAdjustment = adjustment.replace(",", ".").trim();
+
+  const parsedAbsoluteAdjustment = Number(normalizedAdjustment);
+
+  const parsedAdjustment = isReduction
+    ? -Math.abs(parsedAbsoluteAdjustment)
+    : Math.abs(parsedAbsoluteAdjustment);
 
   const canAdjust =
     adjustment.trim() !== "" &&
-    Number.isFinite(parsedAdjustment) &&
-    parsedAdjustment !== 0;
+    Number.isFinite(parsedAbsoluteAdjustment) &&
+    parsedAbsoluteAdjustment > 0;
 
   const handleAdjustment = async () => {
     if (!canAdjust) {
@@ -110,6 +135,7 @@ export function RawMaterialDetailsModal({
 
       setAdjustment("");
       setNote("");
+      setIsReduction(false);
     } catch {
       // Le parent gère l'erreur.
     }
@@ -144,9 +170,11 @@ export function RawMaterialDetailsModal({
 
     Alert.alert(
       nextStatus ? "Activer la matière" : "Désactiver la matière",
+
       nextStatus
         ? `« ${ingredient.name} » sera à nouveau disponible dans la gestion.`
         : `« ${ingredient.name} » sera désactivée. Son historique et son stock seront conservés.`,
+
       [
         {
           text: "Annuler",
@@ -154,6 +182,7 @@ export function RawMaterialDetailsModal({
         },
         {
           text: nextStatus ? "Activer" : "Désactiver",
+
           onPress: async () => {
             try {
               await onToggleActive(nextStatus);
@@ -172,12 +201,21 @@ export function RawMaterialDetailsModal({
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
         <Pressable style={styles.backdrop} onPress={onClose} />
 
         <View style={styles.modal}>
           <View style={styles.handle} />
+
+          {/* ================================================== */}
+          {/* HEADER                                             */}
+          {/* ================================================== */}
 
           <View style={styles.header}>
             <View
@@ -215,10 +253,24 @@ export function RawMaterialDetailsModal({
             </Pressable>
           </View>
 
+          {/* ================================================== */}
+          {/* CONTENT                                            */}
+          {/* ================================================== */}
+
           <ScrollView
-            showsVerticalScrollIndicator={false}
+            style={styles.scrollView}
             contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={
+              Platform.OS === "ios" ? "interactive" : "on-drag"
+            }
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           >
+            {/* ================================================== */}
+            {/* STOCK                                             */}
+            {/* ================================================== */}
+
             <View style={styles.stockCard}>
               <View>
                 <Text style={styles.stockLabel}>Stock actuel</Text>
@@ -261,6 +313,10 @@ export function RawMaterialDetailsModal({
                 </Text>
               </View>
             </View>
+
+            {/* ================================================== */}
+            {/* INFORMATIONS                                       */}
+            {/* ================================================== */}
 
             <View style={styles.infoGrid}>
               <View style={styles.infoItem}>
@@ -327,6 +383,10 @@ export function RawMaterialDetailsModal({
               </View>
             </View>
 
+            {/* ================================================== */}
+            {/* AJUSTEMENT STOCK                                  */}
+            {/* ================================================== */}
+
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionIcon}>
@@ -337,7 +397,7 @@ export function RawMaterialDetailsModal({
                   />
                 </View>
 
-                <View>
+                <View style={styles.sectionHeaderContent}>
                   <Text style={styles.sectionTitle}>Ajuster le stock</Text>
 
                   <Text style={styles.sectionSubtitle}>
@@ -346,18 +406,59 @@ export function RawMaterialDetailsModal({
                 </View>
               </View>
 
+              {/* ================================================== */}
+              {/* INPUT + +/-                                       */}
+              {/* ================================================== */}
+
               <View style={styles.adjustmentRow}>
-                <View style={styles.adjustmentInput}>
-                  <Text style={styles.adjustmentSign}>±</Text>
+                <View
+                  style={[
+                    styles.adjustmentInput,
+                    canAdjust &&
+                      (isReduction
+                        ? styles.adjustmentInputReduction
+                        : styles.adjustmentInputAddition),
+                  ]}
+                >
+                  {/* BOUTON +/- */}
+
+                  <Pressable
+                    style={[
+                      styles.signButton,
+                      isReduction && styles.signButtonReduction,
+                    ]}
+                    onPress={() => setIsReduction((current) => !current)}
+                    disabled={isAdjustingStock}
+                    hitSlop={4}
+                  >
+                    <Text
+                      style={[
+                        styles.signButtonText,
+                        isReduction && styles.signButtonTextReduction,
+                      ]}
+                    >
+                      {isReduction ? "−" : "+"}
+                    </Text>
+                  </Pressable>
+
+                  {/* VALEUR */}
 
                   <TextInput
                     value={adjustment}
-                    onChangeText={setAdjustment}
+                    onChangeText={(value) => {
+                      // Autorise uniquement :
+                      // chiffres + point + virgule
+                      const cleaned = value.replace(/[^0-9.,]/g, "");
+
+                      setAdjustment(cleaned);
+                    }}
                     placeholder="0"
                     placeholderTextColor={COLORS.Gray}
                     keyboardType="decimal-pad"
+                    returnKeyType="done"
                     style={styles.adjustmentTextInput}
                     editable={!isAdjustingStock}
+                    selectTextOnFocus
                   />
 
                   <Text style={styles.adjustmentUnit}>
@@ -365,11 +466,15 @@ export function RawMaterialDetailsModal({
                   </Text>
                 </View>
 
+                {/* VALIDATION */}
+
                 <Pressable
                   style={({ pressed }) => [
                     styles.adjustButton,
+
                     (!canAdjust || isAdjustingStock) &&
                       styles.adjustButtonDisabled,
+
                     pressed &&
                       canAdjust &&
                       !isAdjustingStock &&
@@ -386,6 +491,42 @@ export function RawMaterialDetailsModal({
                 </Pressable>
               </View>
 
+              {/* ================================================== */}
+              {/* INDICATION AJOUT / RETRAIT                       */}
+              {/* ================================================== */}
+
+              <View
+                style={[
+                  styles.adjustmentHint,
+                  isReduction && styles.adjustmentHintReduction,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    isReduction
+                      ? "arrow-down-circle-outline"
+                      : "arrow-up-circle-outline"
+                  }
+                  size={15}
+                  color={isReduction ? COLORS.error : COLORS.primary}
+                />
+
+                <Text
+                  style={[
+                    styles.adjustmentHintText,
+                    isReduction && styles.adjustmentHintTextReduction,
+                  ]}
+                >
+                  {isReduction
+                    ? "Cette quantité sera retirée du stock."
+                    : "Cette quantité sera ajoutée au stock."}
+                </Text>
+              </View>
+
+              {/* ================================================== */}
+              {/* NOTE                                               */}
+              {/* ================================================== */}
+
               <TextInput
                 value={note}
                 onChangeText={setNote}
@@ -396,8 +537,14 @@ export function RawMaterialDetailsModal({
                 numberOfLines={2}
                 maxLength={255}
                 editable={!isAdjustingStock}
+                textAlignVertical="top"
+                returnKeyType="done"
               />
             </View>
+
+            {/* ================================================== */}
+            {/* ACTIONS                                            */}
+            {/* ================================================== */}
 
             <View style={styles.actionsSection}>
               <Pressable
@@ -455,16 +602,20 @@ export function RawMaterialDetailsModal({
                 )}
               </Pressable>
             </View>
+
+            <View style={styles.bottomSpacer} />
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-import React from "react";
-
 const styles = StyleSheet.create({
+  // ==========================================================
+  // MODAL
+  // ==========================================================
+
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -481,6 +632,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 10,
+    overflow: "hidden",
   },
 
   handle: {
@@ -491,6 +643,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#DADAD7",
     marginBottom: 17,
   },
+
+  scrollView: {
+    flexGrow: 0,
+  },
+
+  // ==========================================================
+  // HEADER
+  // ==========================================================
 
   header: {
     flexDirection: "row",
@@ -543,10 +703,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F3F1",
   },
 
+  // ==========================================================
+  // CONTENT
+  // ==========================================================
+
   content: {
     paddingHorizontal: 20,
     paddingBottom: 35,
   },
+
+  // ==========================================================
+  // STOCK
+  // ==========================================================
 
   stockCard: {
     padding: 16,
@@ -610,6 +778,10 @@ const styles = StyleSheet.create({
     color: "#B87900",
   },
 
+  // ==========================================================
+  // INFORMATIONS
+  // ==========================================================
+
   infoGrid: {
     marginTop: 13,
     gap: 8,
@@ -660,6 +832,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
+  // ==========================================================
+  // SECTION
+  // ==========================================================
+
   section: {
     marginTop: 17,
     padding: 15,
@@ -673,6 +849,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 13,
+  },
+
+  sectionHeaderContent: {
+    flex: 1,
   },
 
   sectionIcon: {
@@ -699,6 +879,10 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
+  // ==========================================================
+  // ADJUSTMENT
+  // ==========================================================
+
   adjustmentRow: {
     flexDirection: "row",
     gap: 8,
@@ -707,7 +891,8 @@ const styles = StyleSheet.create({
   adjustmentInput: {
     flex: 1,
     minHeight: 48,
-    paddingHorizontal: 12,
+    paddingLeft: 6,
+    paddingRight: 12,
     borderRadius: 13,
     borderWidth: 1,
     borderColor: "#E5E5E2",
@@ -716,14 +901,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  adjustmentSign: {
+  adjustmentInputAddition: {
+    borderColor: "#CFE2CB",
+    backgroundColor: "#F7FBF5",
+  },
+
+  adjustmentInputReduction: {
+    borderColor: "#F0CFCF",
+    backgroundColor: "#FFF9F9",
+  },
+
+  // ==========================================================
+  // +/- BUTTON
+  // ==========================================================
+
+  signButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF2E7",
+  },
+
+  signButtonReduction: {
+    backgroundColor: "#FDECEC",
+  },
+
+  signButtonText: {
     fontFamily: fonts.bold,
-    fontSize: 17,
+    fontSize: 20,
+    lineHeight: 22,
     color: COLORS.primary,
+  },
+
+  signButtonTextReduction: {
+    color: COLORS.error,
   },
 
   adjustmentTextInput: {
     flex: 1,
+    minWidth: 0,
     marginLeft: 7,
     paddingVertical: 8,
     fontFamily: fonts.medium,
@@ -732,10 +950,15 @@ const styles = StyleSheet.create({
   },
 
   adjustmentUnit: {
+    marginLeft: 5,
     fontFamily: fonts.medium,
     fontSize: 9,
     color: COLORS.Gray,
   },
+
+  // ==========================================================
+  // VALIDATE BUTTON
+  // ==========================================================
 
   adjustButton: {
     width: 48,
@@ -754,6 +977,38 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
 
+  // ==========================================================
+  // HINT
+  // ==========================================================
+
+  adjustmentHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+
+  adjustmentHintReduction: {
+    // pas besoin de fond différent,
+    // la couleur de l'icône suffit
+  },
+
+  adjustmentHintText: {
+    flex: 1,
+    marginLeft: 6,
+    fontFamily: fonts.regular,
+    fontSize: 8.5,
+    color: COLORS.primary,
+  },
+
+  adjustmentHintTextReduction: {
+    color: COLORS.error,
+  },
+
+  // ==========================================================
+  // NOTE
+  // ==========================================================
+
   noteInput: {
     minHeight: 58,
     marginTop: 8,
@@ -769,6 +1024,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlignVertical: "top",
   },
+
+  // ==========================================================
+  // ACTIONS
+  // ==========================================================
 
   actionsSection: {
     marginTop: 17,
@@ -822,5 +1081,13 @@ const styles = StyleSheet.create({
 
   actionPressed: {
     opacity: 0.6,
+  },
+
+  // ==========================================================
+  // BOTTOM
+  // ==========================================================
+
+  bottomSpacer: {
+    height: 20,
   },
 });
