@@ -43,14 +43,15 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "buildAE": "npx eas build -p android --profile preview",
     "buildAab": "cd android && gradlew bundleRelease",
-    "buildApk": "cd android && gradlew assembleRelease",
-    "prebuild": "npx expo prebuild --clean"
+    "buildApk": "cd android && gradlew assembleRelease --no-daemon",
+    "prebuild": "npx expo prebuild --clean",
+    "easApk": "npx eas build -p android --profile preview"
   },
   "private": true
 }

@@ -1,7 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-
 import { useEffect, useMemo, useRef, useState } from "react";
-
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +17,6 @@ import {
 } from "react-native";
 
 import type { Product } from "@/types/product";
-
 import type {
   CreateRecipePayload,
   Recipe,
@@ -27,7 +24,6 @@ import type {
   UpdateRecipePayload,
 } from "@/types/recipe";
 
-import { useProductStore } from "@/store/product.store";
 import { useRawIngredientStore } from "@/store/raw-ingredient.store";
 import { useRecipeStore } from "@/store/recipe.store";
 
@@ -56,19 +52,15 @@ const UNIT_LABELS: Record<string, string> = {
   LITER: "L",
 };
 
-const formatVolume = (volumeMl: number): string => {
+const formatVolume = (volumeMl: number) => {
   if (!Number.isFinite(volumeMl)) {
     return "0 ml";
   }
 
   if (volumeMl >= 1000) {
-    const liters = volumeMl / 1000;
-
-    return Number.isInteger(liters)
-      ? `${liters} L`
-      : `${liters.toLocaleString("fr-FR", {
-          maximumFractionDigits: 2,
-        })} L`;
+    return `${(volumeMl / 1000).toLocaleString("fr-FR", {
+      maximumFractionDigits: 2,
+    })} L`;
   }
 
   return `${volumeMl.toLocaleString("fr-FR")} ml`;
@@ -78,10 +70,6 @@ export function ProductRecipe({
   product,
   disabled = false,
 }: ProductRecipeProps) {
-  // ==========================================================
-  // STORES
-  // ==========================================================
-
   const {
     recipes,
     initialize: initializeRecipes,
@@ -98,23 +86,13 @@ export function ProductRecipe({
     isLoading: isLoadingIngredients,
   } = useRawIngredientStore();
 
-  const { updateProduct, isUpdating: isUpdatingProduct } = useProductStore();
-
-  // ==========================================================
-  // FORM
-  // ==========================================================
-
   const [mode, setMode] = useState<RecipeMode>("create");
-
   const [isModalVisible, setIsModalVisible] = useState(false);
-
   const [isIngredientPickerVisible, setIsIngredientPickerVisible] =
     useState(false);
 
   const [recipeName, setRecipeName] = useState("");
-
   const [recipeDescription, setRecipeDescription] = useState("");
-
   const [productionVolumeMl, setProductionVolumeMl] = useState("");
 
   const [selectedIngredientId, setSelectedIngredientId] = useState<
@@ -122,52 +100,43 @@ export function ProductRecipe({
   >(null);
 
   const [quantity, setQuantity] = useState("");
-
   const [items, setItems] = useState<DraftItem[]>([]);
-
   const [localError, setLocalError] = useState<string | null>(null);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ==========================================================
-  // REFS
-  // ==========================================================
-
   const itemsRef = useRef<DraftItem[]>([]);
-
   const contentScrollRef = useRef<ScrollView>(null);
-
   const errorScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
 
-  // ==========================================================
+  // ============================================================
   // INITIALISATION
-  // ==========================================================
+  // ============================================================
 
   useEffect(() => {
     initializeRecipes();
     initializeIngredients();
   }, [initializeRecipes, initializeIngredients]);
 
-  // ==========================================================
+  // ============================================================
   // RECIPE
-  // ==========================================================
+  // ============================================================
 
   const recipe = useMemo<Recipe | undefined>(() => {
-    if (!product.recipeId) {
-      return undefined;
+    if (product.recipe) {
+      return product.recipe;
     }
 
-    return recipes.find((item) => item.id === product.recipeId);
-  }, [product.recipeId, recipes]);
+    return recipes.find((item) => item.productId === product.id);
+  }, [product.recipe, product.id, recipes]);
 
-  // ==========================================================
+  // ============================================================
   // INGREDIENTS
-  // ==========================================================
+  // ============================================================
 
   const activeIngredients = useMemo(() => {
-    return rawIngredients
+    return [...rawIngredients]
       .filter((ingredient) => ingredient.isActive)
       .sort((a, b) => a.name.localeCompare(b.name, "fr"));
   }, [rawIngredients]);
@@ -177,7 +146,7 @@ export function ProductRecipe({
   };
 
   const getIngredientName = (ingredientId: string) => {
-    return getIngredient(ingredientId)?.name ?? "Matière première inconnue";
+    return getIngredient(ingredientId)?.name ?? "Matière inconnue";
   };
 
   const getIngredientUnit = (ingredientId: string) => {
@@ -190,9 +159,9 @@ export function ProductRecipe({
     return UNIT_LABELS[ingredient.unit] ?? ingredient.unit.toLowerCase();
   };
 
-  // ==========================================================
+  // ============================================================
   // DRAFT SOURCE OF TRUTH
-  // ==========================================================
+  // ============================================================
 
   const updateDraftItems = (
     updater: DraftItem[] | ((current: DraftItem[]) => DraftItem[]),
@@ -206,24 +175,27 @@ export function ProductRecipe({
     });
   };
 
+  // ============================================================
+  // RESET
+  // ============================================================
+
   const resetForm = () => {
-    const emptyItems: DraftItem[] = [];
-
-    itemsRef.current = emptyItems;
-
     setRecipeName("");
     setRecipeDescription("");
     setProductionVolumeMl("");
     setSelectedIngredientId(null);
     setQuantity("");
-    setItems(emptyItems);
+    setItems([]);
+
+    itemsRef.current = [];
+
     setLocalError(null);
     setIsIngredientPickerVisible(false);
   };
 
-  // ==========================================================
-  // MODAL
-  // ==========================================================
+  // ============================================================
+  // OPEN CREATE
+  // ============================================================
 
   const openCreateModal = () => {
     if (disabled) {
@@ -236,6 +208,10 @@ export function ProductRecipe({
     setIsModalVisible(true);
   };
 
+  // ============================================================
+  // OPEN EDIT
+  // ============================================================
+
   const openEditModal = () => {
     if (disabled || !recipe) {
       return;
@@ -247,23 +223,26 @@ export function ProductRecipe({
       quantity: String(item.quantity),
     }));
 
-    itemsRef.current = draftItems;
-
     setRecipeName(recipe.name);
-
     setRecipeDescription(recipe.description ?? "");
-
     setProductionVolumeMl(String(recipe.productionVolumeMl));
 
-    setItems(draftItems);
     setSelectedIngredientId(null);
     setQuantity("");
+
+    setItems(draftItems);
+    itemsRef.current = draftItems;
+
     setLocalError(null);
     setIsIngredientPickerVisible(false);
 
     setMode("edit");
     setIsModalVisible(true);
   };
+
+  // ============================================================
+  // CLOSE MODAL
+  // ============================================================
 
   const closeModal = () => {
     if (isSubmitting) {
@@ -273,14 +252,13 @@ export function ProductRecipe({
     Keyboard.dismiss();
 
     setIsIngredientPickerVisible(false);
-
     setIsModalVisible(false);
     setLocalError(null);
   };
 
-  // ==========================================================
+  // ============================================================
   // ERROR
-  // ==========================================================
+  // ============================================================
 
   const showError = (message: string) => {
     setLocalError(message);
@@ -297,123 +275,118 @@ export function ProductRecipe({
     }, 80);
   };
 
-  // ==========================================================
-  // ADD INGREDIENT
-  // ==========================================================
+  // ============================================================
+  // ADD ITEM
+  // ============================================================
 
   const handleAddItem = () => {
-    Keyboard.dismiss();
-    setLocalError(null);
-
     if (!selectedIngredientId) {
       showError("Sélectionnez une matière première.");
       return;
     }
 
-    const currentItems = itemsRef.current;
-
-    if (currentItems.length >= MAX_ITEMS) {
-      showError("Une recette ne peut pas contenir plus de 50 ingrédients.");
+    if (itemsRef.current.length >= MAX_ITEMS) {
+      showError(
+        `Une recette ne peut pas contenir plus de ${MAX_ITEMS} ingrédients.`,
+      );
       return;
     }
 
-    if (
-      currentItems.some((item) => item.ingredientId === selectedIngredientId)
-    ) {
+    const alreadyExists = itemsRef.current.some(
+      (item) => item.ingredientId === selectedIngredientId,
+    );
+
+    if (alreadyExists) {
       showError("Cette matière première est déjà présente dans la recette.");
       return;
     }
 
-    const normalizedQuantity = quantity.trim().replace(",", ".");
+    const normalizedQuantity = Number(quantity.replace(",", ".").trim());
 
-    const numericQuantity = Number(normalizedQuantity);
-
-    if (
-      !normalizedQuantity ||
-      !Number.isFinite(numericQuantity) ||
-      numericQuantity <= 0
-    ) {
+    if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
       showError("La quantité doit être supérieure à 0.");
       return;
     }
 
-    const newItem: DraftItem = {
-      ingredientId: selectedIngredientId,
-      quantity: String(numericQuantity),
-    };
+    const nextItems = [
+      ...itemsRef.current,
+      {
+        ingredientId: selectedIngredientId,
+        quantity: String(normalizedQuantity),
+      },
+    ];
 
-    updateDraftItems((current) => [...current, newItem]);
+    updateDraftItems(nextItems);
 
     setSelectedIngredientId(null);
-
     setQuantity("");
-
     setIsIngredientPickerVisible(false);
+    setLocalError(null);
 
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       contentScrollRef.current?.scrollToEnd({
         animated: true,
       });
-    }, 100);
+    });
   };
 
-  // ==========================================================
-  // UPDATE QUANTITY
-  // ==========================================================
+  // ============================================================
+  // QUANTITY CHANGE
+  // ============================================================
 
-  const handleQuantityChange = (itemIndex: number, value: string) => {
-    const sanitized = value.replace(/[^0-9,.]/g, "");
+  const handleQuantityChange = (index: number, value: string) => {
+    const sanitized = value.replace(",", ".").replace(/[^0-9.]/g, "");
+
+    const parts = sanitized.split(".");
+
+    const normalized =
+      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : sanitized;
 
     updateDraftItems((current) =>
-      current.map((item, index) =>
-        index === itemIndex
+      current.map((item, itemIndex) =>
+        itemIndex === index
           ? {
               ...item,
-              quantity: sanitized,
+              quantity: normalized,
             }
           : item,
       ),
     );
-
-    setLocalError(null);
   };
 
-  // ==========================================================
-  // REMOVE INGREDIENT
-  // ==========================================================
+  // ============================================================
+  // REMOVE ITEM
+  // ============================================================
 
-  const handleRemoveItem = (itemIndex: number) => {
-    Keyboard.dismiss();
-    setLocalError(null);
-
+  const handleRemoveItem = (index: number) => {
     updateDraftItems((current) =>
-      current.filter((_, index) => index !== itemIndex),
+      current.filter((_, itemIndex) => itemIndex !== index),
     );
   };
 
-  // ==========================================================
+  // ============================================================
   // SELECT INGREDIENT
-  // ==========================================================
+  // ============================================================
 
   const handleSelectIngredient = (ingredientId: string) => {
+    const alreadyExists = itemsRef.current.some(
+      (item) => item.ingredientId === ingredientId,
+    );
+
+    if (alreadyExists) {
+      return;
+    }
+
     setSelectedIngredientId(ingredientId);
-
-    setLocalError(null);
-
     setIsIngredientPickerVisible(false);
-
-    setTimeout(() => {
-      contentScrollRef.current?.scrollToEnd({
-        animated: true,
-      });
-    }, 100);
+    setLocalError(null);
   };
 
-  // ==========================================================
+  // ============================================================
   // VALIDATION
-  // ==========================================================
+  // ============================================================
 
-  const validateForm = (draftItems: DraftItem[]): boolean => {
+  const validateForm = (): boolean => {
     const cleanName = recipeName.trim();
 
     if (cleanName.length < 2) {
@@ -431,68 +404,50 @@ export function ProductRecipe({
       return false;
     }
 
-    // --------------------------------------------------------
-    // VOLUME DE PRODUCTION DE RÉFÉRENCE
-    // --------------------------------------------------------
+    const volumeMl = Number(productionVolumeMl.replace(",", ".").trim());
 
-    const normalizedVolume = productionVolumeMl.trim().replace(",", ".");
-
-    const numericVolume = Number(normalizedVolume);
-
-    if (
-      !normalizedVolume ||
-      !Number.isFinite(numericVolume) ||
-      numericVolume <= 0
-    ) {
-      showError(
-        "Le volume de production de référence doit être supérieur à 0.",
-      );
+    if (!Number.isFinite(volumeMl) || volumeMl <= 0) {
+      showError("Le volume de référence doit être supérieur à 0.");
       return false;
     }
 
-    if (!Number.isInteger(numericVolume)) {
-      showError("Le volume de production doit être un nombre entier en ml.");
+    if (!Number.isInteger(volumeMl)) {
+      showError("Le volume de référence doit être un nombre entier en ml.");
       return false;
     }
 
-    if (draftItems.length === 0) {
+    if (itemsRef.current.length === 0) {
       showError("Ajoutez au moins une matière première à la recette.");
       return false;
     }
 
-    if (draftItems.length > MAX_ITEMS) {
-      showError("Une recette ne peut pas contenir plus de 50 ingrédients.");
+    if (itemsRef.current.length > MAX_ITEMS) {
+      showError(
+        `Une recette ne peut pas contenir plus de ${MAX_ITEMS} ingrédients.`,
+      );
       return false;
     }
 
     const ingredientIds = new Set<string>();
 
-    for (let index = 0; index < draftItems.length; index++) {
-      const item = draftItems[index];
-
+    for (const item of itemsRef.current) {
       if (ingredientIds.has(item.ingredientId)) {
         showError(
-          `La matière première "${getIngredientName(
-            item.ingredientId,
-          )}" est présente plusieurs fois.`,
+          "Une même matière première ne peut apparaître qu'une seule fois dans la recette.",
         );
-
         return false;
       }
 
       ingredientIds.add(item.ingredientId);
 
-      const normalizedQuantity = item.quantity.trim().replace(",", ".");
+      const itemQuantity = Number(item.quantity.replace(",", ".").trim());
 
-      const numericQuantity = Number(normalizedQuantity);
-
-      if (!Number.isFinite(numericQuantity) || numericQuantity <= 0) {
+      if (!Number.isFinite(itemQuantity) || itemQuantity <= 0) {
         showError(
-          `La quantité de "${getIngredientName(
+          `La quantité de « ${getIngredientName(
             item.ingredientId,
-          )}" doit être supérieure à 0.`,
+          )} » doit être supérieure à 0.`,
         );
-
         return false;
       }
     }
@@ -500,43 +455,40 @@ export function ProductRecipe({
     return true;
   };
 
-  // ==========================================================
+  // ============================================================
   // SUBMIT
-  // ==========================================================
+  // ============================================================
 
   const handleSubmit = async () => {
-    if (isSubmitting || disabled) {
+    if (disabled || isSubmitting || isCreatingRecipe || isUpdatingRecipe) {
       return;
     }
 
     Keyboard.dismiss();
     setLocalError(null);
 
-    const draftItems = itemsRef.current;
-
-    if (!validateForm(draftItems)) {
+    if (!validateForm()) {
       return;
     }
+
+    const volumeMl = Number(productionVolumeMl.replace(",", ".").trim());
+
+    const normalizedItems = itemsRef.current.map((item) => ({
+      ...item,
+      quantity: Number(item.quantity.replace(",", ".").trim()),
+    }));
 
     setIsSubmitting(true);
 
     try {
-      const normalizedVolume = productionVolumeMl.trim().replace(",", ".");
-
-      const normalizedItems = draftItems.map((item) => ({
-        id: item.id,
-        ingredientId: item.ingredientId,
-        quantity: Number(item.quantity.trim().replace(",", ".")),
-      }));
-
-      const volumeMl = Number(normalizedVolume);
-
       // ======================================================
-      // CREATE
+      // CRÉATION
       // ======================================================
 
       if (mode === "create") {
         const payload: CreateRecipePayload = {
+          productId: product.id,
+
           name: recipeName.trim(),
 
           description: recipeDescription.trim(),
@@ -550,96 +502,53 @@ export function ProductRecipe({
           })),
         };
 
-        const createdRecipe = await useRecipeStore
-          .getState()
-          .createRecipe(payload);
-
-        // ----------------------------------------------------
-        // ASSOCIER LA RECETTE AU PRODUIT
-        // ----------------------------------------------------
-
-        await updateProduct(product.id, {
-          name: product.name,
-
-          description: product.description ?? undefined,
-
-          recipeId: createdRecipe.id,
-
-          isActive: product.isActive,
-
-          variants: product.variants.map((variant) => ({
-            id: variant.id,
-
-            packagingId: variant.packagingId,
-
-            sku: variant.sku,
-
-            price: Number(variant.price),
-
-            shelfLifeDays: Number(variant.shelfLifeDays),
-
-            isActive: variant.isActive,
-          })),
-        });
-
-        closeModal();
+        await useRecipeStore.getState().createRecipe(payload);
 
         Alert.alert(
           "Recette créée",
-          `La recette "${createdRecipe.name}" a été créée pour une production de référence de ${formatVolume(
-            createdRecipe.productionVolumeMl,
-          )}, avec ${normalizedItems.length} matière(s) première(s).`,
+          "La recette du produit a été créée avec succès.",
         );
-
-        return;
       }
 
       // ======================================================
-      // EDIT
+      // MODIFICATION
       // ======================================================
+      else {
+        if (!recipe) {
+          throw new Error("La recette à modifier est introuvable.");
+        }
 
-      if (!recipe) {
-        showError("La recette à modifier est introuvable.");
+        const payload: UpdateRecipePayload = {
+          name: recipeName.trim(),
 
-        return;
+          description: recipeDescription.trim(),
+
+          productionVolumeMl: volumeMl,
+
+          items: normalizedItems.map(
+            (item): UpdateRecipeItemPayload => ({
+              ...(item.id ? { id: item.id } : {}),
+
+              ingredientId: item.ingredientId,
+
+              quantity: item.quantity,
+            }),
+          ),
+        };
+
+        await useRecipeStore.getState().updateRecipe(recipe.id, payload);
+
+        Alert.alert(
+          "Recette mise à jour",
+          "La recette du produit a été mise à jour avec succès.",
+        );
       }
 
-      const updateItems: UpdateRecipeItemPayload[] = normalizedItems.map(
-        (item) => ({
-          ...(item.id
-            ? {
-                id: item.id,
-              }
-            : {}),
-
-          ingredientId: item.ingredientId,
-
-          quantity: item.quantity,
-        }),
-      );
-
-      const payload: UpdateRecipePayload = {
-        name: recipeName.trim(),
-
-        description: recipeDescription.trim(),
-
-        productionVolumeMl: volumeMl,
-
-        items: updateItems,
-      };
-
-      const updatedRecipe = await useRecipeStore
-        .getState()
-        .updateRecipe(recipe.id, payload);
-
-      closeModal();
-
-      Alert.alert(
-        "Recette modifiée",
-        `La recette "${updatedRecipe.name}" a été mise à jour.`,
-      );
+      setIsModalVisible(false);
+      setIsIngredientPickerVisible(false);
+      setLocalError(null);
     } catch (error) {
-      console.error("Erreur recette :", error);
+      console.error("Erreur sauvegarde recette :", error);
 
       const message =
         error instanceof Error
@@ -652,18 +561,18 @@ export function ProductRecipe({
     }
   };
 
-  // ==========================================================
-  // DELETE RECIPE
-  // ==========================================================
+  // ============================================================
+  // DELETE
+  // ============================================================
 
   const handleDeleteRecipe = () => {
-    if (disabled || !recipe || isDeletingRecipe || isUpdatingProduct) {
+    if (disabled || !recipe || isDeletingRecipe) {
       return;
     }
 
     Alert.alert(
       "Supprimer la recette",
-      `Voulez-vous vraiment supprimer la recette "${recipe.name}" ?`,
+      `Voulez-vous vraiment supprimer la recette « ${recipe.name} » ?\n\nCette action supprimera également sa composition.`,
       [
         {
           text: "Annuler",
@@ -672,51 +581,23 @@ export function ProductRecipe({
         {
           text: "Supprimer",
           style: "destructive",
-
           onPress: async () => {
             try {
-              // ------------------------------------------------
-              // DÉTACHER LA RECETTE DU PRODUIT
-              // ------------------------------------------------
-
-              await updateProduct(product.id, {
-                name: product.name,
-
-                description: product.description ?? undefined,
-
-                recipeId: "",
-
-                isActive: product.isActive,
-
-                variants: product.variants.map((variant) => ({
-                  id: variant.id,
-
-                  packagingId: variant.packagingId,
-
-                  sku: variant.sku,
-
-                  price: Number(variant.price),
-
-                  shelfLifeDays: Number(variant.shelfLifeDays),
-
-                  isActive: variant.isActive,
-                })),
-              });
-
-              // ------------------------------------------------
-              // SUPPRIMER LA RECETTE
-              // ------------------------------------------------
-
               await useRecipeStore.getState().deleteRecipe(recipe.id);
 
               Alert.alert(
                 "Recette supprimée",
-                "La recette a été supprimée du produit.",
+                "La recette du produit a été supprimée avec succès.",
               );
             } catch (error) {
               console.error("Erreur suppression recette :", error);
 
-              Alert.alert("Erreur", "Impossible de supprimer la recette.");
+              Alert.alert(
+                "Erreur",
+                error instanceof Error
+                  ? error.message
+                  : "Impossible de supprimer la recette.",
+              );
             }
           },
         },
@@ -724,9 +605,9 @@ export function ProductRecipe({
     );
   };
 
-  // ==========================================================
-  // LOADING
-  // ==========================================================
+  // ============================================================
+  // LOADING / BUSY
+  // ============================================================
 
   const isLoading = isLoadingRecipes || isLoadingIngredients;
 
@@ -735,15 +616,16 @@ export function ProductRecipe({
     isSubmitting ||
     isCreatingRecipe ||
     isUpdatingRecipe ||
-    isUpdatingProduct ||
     isDeletingRecipe;
 
-  // ==========================================================
-  // RENDER ITEM
-  // ==========================================================
+  // ============================================================
+  // DRAFT ITEM
+  // ============================================================
 
   const renderDraftItem = (item: DraftItem, index: number) => {
     const ingredient = getIngredient(item.ingredientId);
+
+    const unit = getIngredientUnit(item.ingredientId);
 
     return (
       <View
@@ -758,15 +640,10 @@ export function ProductRecipe({
           <View style={styles.itemHeader}>
             <View style={styles.itemNameContainer}>
               <Text style={styles.itemName} numberOfLines={1}>
-                {ingredient?.name ?? "Matière première inconnue"}
+                {ingredient?.name ?? "Matière inconnue"}
               </Text>
 
-              {ingredient && (
-                <Text style={styles.itemUnit}>
-                  Unité de stock :{" "}
-                  {UNIT_LABELS[ingredient.unit] ?? ingredient.unit}
-                </Text>
-              )}
+              <Text style={styles.itemUnit}>Unité de stock : {unit}</Text>
             </View>
 
             <Pressable
@@ -778,19 +655,19 @@ export function ProductRecipe({
               disabled={isBusy}
               hitSlop={6}
             >
-              <Ionicons name="trash-outline" size={17} color={COLORS.error} />
+              <Ionicons name="trash-outline" size={15} color={COLORS.error} />
             </Pressable>
           </View>
 
           <View style={styles.quantityRow}>
             <View style={styles.quantityLabelContainer}>
               <MaterialCommunityIcons
-                name="flask-outline"
-                size={15}
-                color={COLORS.primary}
+                name="scale-balance"
+                size={13}
+                color={COLORS.Gray}
               />
 
-              <Text style={styles.quantityLabel}>Quantité de référence</Text>
+              <Text style={styles.quantityLabel}>Quantité</Text>
             </View>
 
             <View style={styles.quantityInputContainer}>
@@ -800,14 +677,11 @@ export function ProductRecipe({
                 keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor={COLORS.Gray}
-                style={styles.quantityInput}
                 editable={!isBusy}
-                selectTextOnFocus
+                style={styles.quantityInput}
               />
 
-              <Text style={styles.quantityUnit}>
-                {getIngredientUnit(item.ingredientId)}
-              </Text>
+              <Text style={styles.quantityUnit}>{unit}</Text>
             </View>
           </View>
         </View>
@@ -815,23 +689,23 @@ export function ProductRecipe({
     );
   };
 
-  // ==========================================================
-  // PICKER
-  // ==========================================================
+  // ============================================================
+  // INGREDIENT PICKER
+  // ============================================================
 
   const renderIngredientPicker = () => {
-    if (!isIngredientPickerVisible) {
-      return null;
-    }
+    const addedIngredientIds = new Set(
+      itemsRef.current.map((item) => item.ingredientId),
+    );
 
     return (
       <View style={styles.pickerContainer}>
         <View style={styles.pickerHeader}>
           <View>
-            <Text style={styles.pickerTitle}>Matières premières</Text>
+            <Text style={styles.pickerTitle}>Choisir une matière première</Text>
 
             <Text style={styles.pickerSubtitle}>
-              Sélectionnez un ingrédient
+              Seules les matières actives sont affichées
             </Text>
           </View>
 
@@ -839,63 +713,52 @@ export function ProductRecipe({
             onPress={() => setIsIngredientPickerVisible(false)}
             hitSlop={8}
           >
-            <Ionicons name="close" size={20} color={COLORS.Gray} />
+            <Ionicons name="close" size={18} color={COLORS.Gray} />
           </Pressable>
         </View>
 
-        <ScrollView
-          style={styles.pickerList}
-          contentContainerStyle={styles.pickerListContent}
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          showsVerticalScrollIndicator={false}
-        >
-          {activeIngredients.length === 0 ? (
-            <View style={styles.emptyPicker}>
-              <Ionicons name="leaf-outline" size={28} color={COLORS.Gray} />
+        {activeIngredients.length === 0 ? (
+          <View style={styles.emptyPicker}>
+            <MaterialCommunityIcons
+              name="package-variant-closed"
+              size={27}
+              color={COLORS.Gray}
+            />
 
-              <Text style={styles.emptyPickerTitle}>
-                Aucune matière première
-              </Text>
+            <Text style={styles.emptyPickerTitle}>Aucune matière première</Text>
 
-              <Text style={styles.emptyPickerText}>
-                Ajoutez d'abord une matière première active.
-              </Text>
-            </View>
-          ) : (
-            activeIngredients.map((ingredient) => {
-              const alreadyAdded = itemsRef.current.some(
-                (item) => item.ingredientId === ingredient.id,
-              );
+            <Text style={styles.emptyPickerText}>
+              Ajoutez d'abord des matières premières dans la section
+              correspondante.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.pickerList}
+            contentContainerStyle={styles.pickerListContent}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
+            {activeIngredients.map((ingredient) => {
+              const alreadyAdded = addedIngredientIds.has(ingredient.id);
 
-              const isSelected = selectedIngredientId === ingredient.id;
+              const selected = selectedIngredientId === ingredient.id;
 
               return (
                 <Pressable
                   key={ingredient.id}
                   style={({ pressed }) => [
                     styles.ingredientOption,
-
-                    isSelected && styles.ingredientOptionSelected,
-
-                    pressed && styles.pressed,
+                    selected && styles.ingredientOptionSelected,
+                    pressed && !alreadyAdded && styles.pressed,
                   ]}
-                  onPress={() => {
-                    if (alreadyAdded) {
-                      showError(
-                        "Cette matière première est déjà présente dans la recette.",
-                      );
-
-                      return;
-                    }
-
-                    handleSelectIngredient(ingredient.id);
-                  }}
+                  onPress={() => handleSelectIngredient(ingredient.id)}
+                  disabled={alreadyAdded || isBusy}
                 >
                   <View style={styles.ingredientIcon}>
-                    <Ionicons
-                      name="leaf-outline"
-                      size={17}
+                    <MaterialCommunityIcons
+                      name="leaf"
+                      size={15}
                       color={alreadyAdded ? COLORS.Gray : COLORS.primary}
                     />
                   </View>
@@ -904,7 +767,6 @@ export function ProductRecipe({
                     <Text
                       style={[
                         styles.ingredientOptionName,
-
                         alreadyAdded && styles.disabledText,
                       ]}
                     >
@@ -912,7 +774,7 @@ export function ProductRecipe({
                     </Text>
 
                     <Text style={styles.ingredientOptionUnit}>
-                      {UNIT_LABELS[ingredient.unit] ?? ingredient.unit}
+                      Unité : {UNIT_LABELS[ingredient.unit] ?? ingredient.unit}
                     </Text>
                   </View>
 
@@ -920,58 +782,62 @@ export function ProductRecipe({
                     <View style={styles.alreadyAddedBadge}>
                       <Text style={styles.alreadyAddedText}>Déjà ajouté</Text>
                     </View>
+                  ) : selected ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={COLORS.primary}
+                    />
                   ) : (
                     <Ionicons
-                      name={
-                        isSelected ? "checkmark-circle" : "add-circle-outline"
-                      }
-                      size={21}
-                      color={isSelected ? COLORS.primary : COLORS.Gray}
+                      name="chevron-forward"
+                      size={17}
+                      color={COLORS.lightGray}
                     />
                   )}
                 </Pressable>
               );
-            })
-          )}
-        </ScrollView>
+            })}
+          </ScrollView>
+        )}
       </View>
     );
   };
 
-  // ==========================================================
+  // ============================================================
   // MODAL
-  // ==========================================================
+  // ============================================================
 
   const renderModal = () => {
+    if (!isModalVisible) {
+      return null;
+    }
+
+    const selectedIngredient = selectedIngredientId
+      ? getIngredient(selectedIngredientId)
+      : undefined;
+
+    const selectedUnit = selectedIngredient
+      ? (UNIT_LABELS[selectedIngredient.unit] ?? selectedIngredient.unit)
+      : "";
+
     return (
       <Modal
         visible={isModalVisible}
         transparent
         animationType="slide"
         onRequestClose={closeModal}
-        statusBarTranslucent
       >
         <KeyboardAvoidingView
           style={styles.modalRoot}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         >
-          <TouchableWithoutFeedback
-            onPress={() => {
-              Keyboard.dismiss();
-
-              if (isIngredientPickerVisible) {
-                setIsIngredientPickerVisible(false);
-              }
-            }}
-          >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalBackdrop}>
-              <TouchableWithoutFeedback onPress={() => {}}>
+              <TouchableWithoutFeedback>
                 <View style={styles.modalContainer}>
-                  {/* ======================================== */}
-                  {/* HEADER FIXE                              */}
-                  {/* ======================================== */}
-
+                  {/* HEADER */}
                   <View style={styles.modalHeader}>
                     <View style={styles.modalHeaderIcon}>
                       <MaterialCommunityIcons
@@ -984,14 +850,14 @@ export function ProductRecipe({
                     <View style={styles.modalHeaderContent}>
                       <Text style={styles.modalTitle}>
                         {mode === "create"
-                          ? "Nouvelle recette"
+                          ? "Ajouter une recette"
                           : "Modifier la recette"}
                       </Text>
 
-                      <Text style={styles.modalSubtitle}>
+                      <Text style={styles.modalSubtitle} numberOfLines={2}>
                         {mode === "create"
-                          ? "Définissez un volume de référence et les matières nécessaires."
-                          : "Modifiez le volume de référence ou les matières utilisées."}
+                          ? `Définissez la recette de « ${product.name} ».`
+                          : `Modifiez la composition de « ${product.name} ».`}
                       </Text>
                     </View>
 
@@ -1002,104 +868,121 @@ export function ProductRecipe({
                       ]}
                       onPress={closeModal}
                       disabled={isSubmitting}
-                      hitSlop={6}
+                      hitSlop={5}
                     >
                       <Ionicons
                         name="close"
-                        size={21}
+                        size={20}
                         color={COLORS.darkGray}
                       />
                     </Pressable>
                   </View>
 
-                  {/* ======================================== */}
-                  {/* CONTENU SCROLLABLE                       */}
-                  {/* ======================================== */}
-
+                  {/* CONTENT */}
                   <ScrollView
                     ref={contentScrollRef}
                     style={styles.modalScroll}
                     contentContainerStyle={styles.modalScrollContent}
-                    showsVerticalScrollIndicator
+                    showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode={
-                      Platform.OS === "ios" ? "interactive" : "on-drag"
-                    }
                     nestedScrollEnabled
                   >
-                    {/* ====================================== */}
-                    {/* INFORMATIONS                            */}
-                    {/* ====================================== */}
-
+                    {/* RECIPE INFORMATION */}
                     <View style={styles.section}>
                       <View style={styles.sectionHeader}>
                         <View style={styles.sectionHeaderIcon}>
-                          <Ionicons
-                            name="information-circle-outline"
-                            size={17}
+                          <MaterialCommunityIcons
+                            name="text-box-edit-outline"
+                            size={18}
                             color={COLORS.primary}
                           />
                         </View>
 
-                        <View>
+                        <View style={styles.sectionHeaderContent}>
                           <Text style={styles.sectionTitle}>Informations</Text>
 
                           <Text style={styles.sectionSubtitle}>
-                            Identifiez votre recette
+                            Identifiez clairement cette recette
                           </Text>
                         </View>
                       </View>
-
-                      {/* ==================================== */}
-                      {/* NOM                                   */}
-                      {/* ==================================== */}
 
                       <Text style={styles.inputLabel}>Nom de la recette</Text>
 
                       <TextInput
                         value={recipeName}
-                        onChangeText={(value) => {
-                          setRecipeName(value);
-
-                          setLocalError(null);
-                        }}
+                        onChangeText={setRecipeName}
                         placeholder="Ex. Jus Ananas Gingembre"
                         placeholderTextColor={COLORS.Gray}
                         style={styles.textInput}
                         maxLength={80}
                         editable={!isBusy}
                         autoCapitalize="sentences"
+                        autoCorrect={false}
                       />
 
-                      {/* ==================================== */}
-                      {/* VOLUME DE RÉFÉRENCE                   */}
-                      {/* ==================================== */}
+                      <Text style={styles.inputLabel}>Description</Text>
 
-                      <Text style={styles.inputLabel}>
-                        Volume de production de référence
-                      </Text>
+                      <TextInput
+                        value={recipeDescription}
+                        onChangeText={setRecipeDescription}
+                        placeholder="Décrivez brièvement cette recette..."
+                        placeholderTextColor={COLORS.Gray}
+                        style={[styles.textInput, styles.descriptionInput]}
+                        maxLength={500}
+                        editable={!isBusy}
+                        multiline
+                        textAlignVertical="top"
+                      />
+
+                      <View style={styles.characterCount}>
+                        <Text style={styles.characterCountText}>
+                          {recipeDescription.length}
+                          /500
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* REFERENCE VOLUME */}
+                    <View style={styles.section}>
+                      <View style={styles.sectionHeader}>
+                        <View style={styles.sectionHeaderIcon}>
+                          <MaterialCommunityIcons
+                            name="cup-water"
+                            size={18}
+                            color={COLORS.primary}
+                          />
+                        </View>
+
+                        <View style={styles.sectionHeaderContent}>
+                          <Text style={styles.sectionTitle}>
+                            Volume de référence
+                          </Text>
+
+                          <Text style={styles.sectionSubtitle}>
+                            Le volume correspondant aux quantités de la recette
+                          </Text>
+                        </View>
+                      </View>
 
                       <View style={styles.volumeInputContainer}>
                         <View style={styles.volumeIcon}>
                           <MaterialCommunityIcons
-                            name="cup-water"
-                            size={17}
+                            name="beaker-outline"
+                            size={16}
                             color={COLORS.primary}
                           />
                         </View>
 
                         <TextInput
                           value={productionVolumeMl}
-                          onChangeText={(value) => {
-                            setProductionVolumeMl(value.replace(/[^0-9]/g, ""));
-
-                            setLocalError(null);
-                          }}
-                          placeholder="Ex. 2000"
+                          onChangeText={(value) =>
+                            setProductionVolumeMl(value.replace(/[^0-9]/g, ""))
+                          }
+                          placeholder="2000"
                           placeholderTextColor={COLORS.Gray}
-                          style={styles.volumeInput}
                           keyboardType="number-pad"
-                          maxLength={7}
+                          style={styles.volumeInput}
                           editable={!isBusy}
                         />
 
@@ -1116,88 +999,18 @@ export function ProductRecipe({
                         />
 
                         <Text style={styles.referenceHintText}>
-                          Ce volume représente le lot de référence de la
-                          recette. Les quantités ci-dessous correspondent à ce
-                          volume.
+                          Exemple : si la recette est prévue pour 2 L et que
+                          vous produisez 10 L, les quantités seront multipliées
+                          par 5.
                         </Text>
                       </View>
 
-                      {/* ==================================== */}
-                      {/* DESCRIPTION                           */}
-                      {/* ==================================== */}
-
-                      <Text style={styles.inputLabel}>Description</Text>
-
-                      <TextInput
-                        value={recipeDescription}
-                        onChangeText={(value) => {
-                          setRecipeDescription(value);
-
-                          setLocalError(null);
-                        }}
-                        placeholder="Décrivez brièvement la composition de cette recette..."
-                        placeholderTextColor={COLORS.Gray}
-                        style={[styles.textInput, styles.descriptionInput]}
-                        maxLength={500}
-                        multiline
-                        textAlignVertical="top"
-                        editable={!isBusy}
-                      />
-
-                      <View style={styles.characterCount}>
-                        <Text style={styles.characterCountText}>
-                          {recipeDescription.length}
-                          /500
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* ====================================== */}
-                    {/* INGREDIENTS                             */}
-                    {/* ====================================== */}
-
-                    <View style={styles.section}>
-                      <View style={styles.sectionHeader}>
-                        <View
-                          style={[
-                            styles.sectionHeaderIcon,
-                            styles.ingredientsHeaderIcon,
-                          ]}
-                        >
-                          <Ionicons
-                            name="leaf-outline"
-                            size={17}
-                            color="#5F8E4E"
-                          />
-                        </View>
-
-                        <View style={styles.sectionHeaderContent}>
-                          <View style={styles.sectionTitleRow}>
-                            <Text style={styles.sectionTitle}>Composition</Text>
-
-                            <View style={styles.countBadge}>
-                              <Text style={styles.countBadgeText}>
-                                {items.length}
-                              </Text>
-                            </View>
-                          </View>
-
-                          <Text style={styles.sectionSubtitle}>
-                            Quantités nécessaires pour le volume de référence.
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* ==================================== */}
-                      {/* REFERENCE SUMMARY                     */}
-                      {/* ==================================== */}
-
-                      {productionVolumeMl.trim() !== "" && (
+                      {Number(productionVolumeMl) > 0 && (
                         <View style={styles.referenceVolumeBox}>
                           <View style={styles.referenceVolumeIcon}>
                             <MaterialCommunityIcons
                               name="flask-outline"
-                              size={17}
+                              size={16}
                               color={COLORS.primary}
                             />
                           </View>
@@ -1219,87 +1032,105 @@ export function ProductRecipe({
                           </View>
                         </View>
                       )}
+                    </View>
 
-                      {/* ==================================== */}
-                      {/* CURRENT ITEMS                        */}
-                      {/* ==================================== */}
-
-                      {items.length > 0 ? (
-                        <View style={styles.itemsList}>
-                          {items.map((item, index) =>
-                            renderDraftItem(item, index),
-                          )}
+                    {/* INGREDIENTS */}
+                    <View style={styles.section}>
+                      <View style={styles.sectionHeader}>
+                        <View
+                          style={[
+                            styles.sectionHeaderIcon,
+                            styles.ingredientsHeaderIcon,
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name="food-apple-outline"
+                            size={18}
+                            color={COLORS.primary}
+                          />
                         </View>
-                      ) : (
+
+                        <View style={styles.sectionHeaderContent}>
+                          <View style={styles.sectionTitleRow}>
+                            <Text style={styles.sectionTitle}>Composition</Text>
+
+                            <View style={styles.countBadge}>
+                              <Text style={styles.countBadgeText}>
+                                {items.length}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text style={styles.sectionSubtitle}>
+                            Matières premières utilisées pour le lot de
+                            référence
+                          </Text>
+                        </View>
+                      </View>
+
+                      {items.length === 0 ? (
                         <View style={styles.emptyItems}>
                           <View style={styles.emptyItemsIcon}>
-                            <Ionicons
-                              name="flask-outline"
-                              size={24}
+                            <MaterialCommunityIcons
+                              name="basket-outline"
+                              size={21}
                               color={COLORS.Gray}
                             />
                           </View>
 
                           <Text style={styles.emptyItemsTitle}>
-                            Aucun ingrédient ajouté
+                            Aucune matière première
                           </Text>
 
                           <Text style={styles.emptyItemsText}>
-                            Ajoutez une ou plusieurs matières premières
-                            ci-dessous.
+                            Ajoutez les ingrédients qui composent cette recette.
                           </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.itemsList}>
+                          {items.map(renderDraftItem)}
                         </View>
                       )}
 
-                      {/* ==================================== */}
-                      {/* ADD ITEM                             */}
-                      {/* ==================================== */}
-
+                      {/* ADD BOX */}
                       <View style={styles.addBox}>
                         <View style={styles.addBoxHeader}>
                           <View>
                             <Text style={styles.addBoxTitle}>
-                              Ajouter un ingrédient
+                              Ajouter une matière
                             </Text>
 
                             <Text style={styles.addBoxSubtitle}>
-                              Indiquez la quantité nécessaire pour le volume de
-                              référence.
+                              Sélectionnez une matière première puis indiquez sa
+                              quantité.
                             </Text>
                           </View>
 
                           <View style={styles.limitBadge}>
                             <Text style={styles.limitBadgeText}>
-                              {items.length}
-                              /50
+                              {items.length}/{MAX_ITEMS}
                             </Text>
                           </View>
                         </View>
 
-                        <Text style={styles.inputLabel}>Matière première</Text>
-
                         <Pressable
                           style={({ pressed }) => [
                             styles.selectButton,
-
-                            pressed && styles.pressed,
-
                             isBusy && styles.disabledInput,
+                            pressed && !isBusy && styles.pressed,
                           ]}
                           onPress={() => {
                             Keyboard.dismiss();
 
-                            setLocalError(null);
-
-                            setIsIngredientPickerVisible((current) => !current);
+                            setIsIngredientPickerVisible((visible) => !visible);
                           }}
-                          disabled={isBusy || activeIngredients.length === 0}
+                          disabled={isBusy || items.length >= MAX_ITEMS}
                         >
                           <View style={styles.selectLeft}>
                             <View style={styles.selectIcon}>
-                              <Ionicons
-                                name="leaf-outline"
-                                size={16}
+                              <MaterialCommunityIcons
+                                name="leaf"
+                                size={15}
                                 color={COLORS.primary}
                               />
                             </View>
@@ -1307,14 +1138,13 @@ export function ProductRecipe({
                             <Text
                               style={[
                                 styles.selectText,
-
                                 !selectedIngredientId &&
                                   styles.selectPlaceholder,
                               ]}
                               numberOfLines={1}
                             >
-                              {selectedIngredientId
-                                ? getIngredientName(selectedIngredientId)
+                              {selectedIngredient
+                                ? selectedIngredient.name
                                 : "Sélectionner une matière première"}
                             </Text>
                           </View>
@@ -1325,28 +1155,28 @@ export function ProductRecipe({
                                 ? "chevron-up"
                                 : "chevron-down"
                             }
-                            size={18}
+                            size={17}
                             color={COLORS.Gray}
                           />
                         </Pressable>
 
-                        {renderIngredientPicker()}
+                        {isIngredientPickerVisible && renderIngredientPicker()}
 
                         <View style={styles.quantityAddRow}>
                           <View style={styles.quantityAddField}>
-                            <Text style={styles.inputLabel}>
-                              Quantité de référence
-                            </Text>
+                            <Text style={styles.inputLabel}>Quantité</Text>
 
                             <View style={styles.quantityAddInputContainer}>
                               <TextInput
                                 value={quantity}
-                                onChangeText={(value) => {
-                                  setQuantity(value.replace(/[^0-9,.]/g, ""));
-
-                                  setLocalError(null);
-                                }}
-                                placeholder="Ex. 2"
+                                onChangeText={(value) =>
+                                  setQuantity(
+                                    value
+                                      .replace(",", ".")
+                                      .replace(/[^0-9.]/g, ""),
+                                  )
+                                }
+                                placeholder="0"
                                 placeholderTextColor={COLORS.Gray}
                                 keyboardType="decimal-pad"
                                 style={styles.quantityAddInput}
@@ -1354,9 +1184,7 @@ export function ProductRecipe({
                               />
 
                               <Text style={styles.quantityAddUnit}>
-                                {selectedIngredientId
-                                  ? getIngredientUnit(selectedIngredientId)
-                                  : "unité"}
+                                {selectedUnit || "unité"}
                               </Text>
                             </View>
                           </View>
@@ -1364,28 +1192,24 @@ export function ProductRecipe({
                           <Pressable
                             style={({ pressed }) => [
                               styles.addButton,
-
-                              (isBusy ||
-                                !selectedIngredientId ||
-                                !quantity.trim()) &&
+                              (!selectedIngredientId || !quantity || isBusy) &&
                                 styles.addButtonDisabled,
-
-                              pressed && styles.addButtonPressed,
+                              pressed &&
+                                selectedIngredientId &&
+                                quantity &&
+                                !isBusy &&
+                                styles.addButtonPressed,
                             ]}
                             onPress={handleAddItem}
                             disabled={
-                              isBusy ||
-                              !selectedIngredientId ||
-                              !quantity.trim()
+                              !selectedIngredientId || !quantity || isBusy
                             }
                           >
                             <Ionicons
                               name="add"
-                              size={21}
+                              size={17}
                               color={
-                                isBusy ||
-                                !selectedIngredientId ||
-                                !quantity.trim()
+                                !selectedIngredientId || !quantity || isBusy
                                   ? COLORS.Gray
                                   : COLORS.white
                               }
@@ -1394,10 +1218,9 @@ export function ProductRecipe({
                             <Text
                               style={[
                                 styles.addButtonText,
-
-                                (isBusy ||
-                                  !selectedIngredientId ||
-                                  !quantity.trim()) &&
+                                (!selectedIngredientId ||
+                                  !quantity ||
+                                  isBusy) &&
                                   styles.addButtonTextDisabled,
                               ]}
                             >
@@ -1407,21 +1230,17 @@ export function ProductRecipe({
                         </View>
                       </View>
 
-                      {/* ==================================== */}
-                      {/* HELPER                               */}
-                      {/* ==================================== */}
-
                       <View style={styles.helperBox}>
                         <Ionicons
                           name="information-circle-outline"
-                          size={16}
+                          size={14}
                           color={COLORS.info}
                         />
 
                         <Text style={styles.helperText}>
-                          Les quantités sont enregistrées dans l'unité de chaque
-                          matière première. Elles serviront de référence lors de
-                          la préparation d'une production.
+                          Les quantités indiquées correspondent uniquement au
+                          lot de référence. Pendant une production, elles
+                          pourront être ajustées selon les besoins réels.
                         </Text>
                       </View>
                     </View>
@@ -1429,16 +1248,13 @@ export function ProductRecipe({
                     <View style={styles.modalBottomSpacer} />
                   </ScrollView>
 
-                  {/* ======================================== */}
-                  {/* ERROR FIXE                               */}
-                  {/* ======================================== */}
-
+                  {/* ERROR */}
                   {(localError || recipeError) && (
                     <View style={styles.errorArea}>
                       <View style={styles.errorIcon}>
                         <Ionicons
-                          name="alert-circle"
-                          size={18}
+                          name="alert-circle-outline"
+                          size={17}
                           color={COLORS.error}
                         />
                       </View>
@@ -1446,20 +1262,10 @@ export function ProductRecipe({
                       <Text style={styles.errorText}>
                         {localError ?? recipeError}
                       </Text>
-
-                      <Pressable
-                        onPress={() => setLocalError(null)}
-                        hitSlop={8}
-                      >
-                        <Ionicons name="close" size={18} color={COLORS.Gray} />
-                      </Pressable>
                     </View>
                   )}
 
-                  {/* ======================================== */}
-                  {/* FOOTER FIXE                              */}
-                  {/* ======================================== */}
-
+                  {/* FOOTER */}
                   <View style={styles.modalFooter}>
                     <Pressable
                       style={({ pressed }) => [
@@ -1475,25 +1281,20 @@ export function ProductRecipe({
                     <Pressable
                       style={({ pressed }) => [
                         styles.submitButton,
-
                         isBusy && styles.submitButtonDisabled,
-
                         pressed && !isBusy && styles.submitButtonPressed,
                       ]}
                       onPress={handleSubmit}
                       disabled={isBusy}
                     >
-                      {isSubmitting ||
-                      isCreatingRecipe ||
-                      isUpdatingRecipe ||
-                      isUpdatingProduct ? (
+                      {isSubmitting || isCreatingRecipe || isUpdatingRecipe ? (
                         <ActivityIndicator size="small" color={COLORS.white} />
                       ) : (
                         <Ionicons
                           name={
                             mode === "create"
-                              ? "checkmark-circle-outline"
-                              : "save-outline"
+                              ? "add-circle-outline"
+                              : "checkmark-circle-outline"
                           }
                           size={19}
                           color={COLORS.white}
@@ -1518,9 +1319,9 @@ export function ProductRecipe({
     );
   };
 
-  // ==========================================================
+  // ============================================================
   // MAIN CARD
-  // ==========================================================
+  // ============================================================
 
   if (isLoading) {
     return (
@@ -1534,11 +1335,11 @@ export function ProductRecipe({
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // NO RECIPE
-  // ==========================================================
+  // ============================================================
 
-  if (!product.recipeId) {
+  if (!recipe) {
     return (
       <>
         <View style={styles.card}>
@@ -1592,53 +1393,9 @@ export function ProductRecipe({
     );
   }
 
-  // ==========================================================
-  // RECIPE NOT LOADED
-  // ==========================================================
-
-  if (!recipe) {
-    return (
-      <>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderIcon}>
-              <MaterialCommunityIcons
-                name="flask-outline"
-                size={20}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.cardHeaderContent}>
-              <Text style={styles.cardTitle}>Recette</Text>
-
-              <Text style={styles.cardSubtitle}>
-                La recette associée n'est pas disponible
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.warningContent}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={22}
-              color={COLORS.warning}
-            />
-
-            <Text style={styles.warningText}>
-              La recette associée à ce produit n'a pas pu être chargée.
-            </Text>
-          </View>
-        </View>
-
-        {renderModal()}
-      </>
-    );
-  }
-
-  // ==========================================================
+  // ============================================================
   // EXISTING RECIPE
-  // ==========================================================
+  // ============================================================
 
   return (
     <>
@@ -1654,7 +1411,9 @@ export function ProductRecipe({
 
           <View style={styles.cardHeaderContent}>
             <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>{recipe.name}</Text>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {recipe.name}
+              </Text>
 
               <View style={styles.recipeCountBadge}>
                 <Text style={styles.recipeCountText}>
@@ -1668,9 +1427,7 @@ export function ProductRecipe({
           </View>
         </View>
 
-        {/* ================================================ */}
-        {/* REFERENCE VOLUME                               */}
-        {/* ================================================ */}
+        {/* REFERENCE VOLUME */}
 
         <View style={styles.mainReferenceBox}>
           <View style={styles.mainReferenceIcon}>
@@ -1694,9 +1451,7 @@ export function ProductRecipe({
           </View>
         </View>
 
-        {/* ================================================ */}
-        {/* DESCRIPTION                                    */}
-        {/* ================================================ */}
+        {/* DESCRIPTION */}
 
         {recipe.description && (
           <View style={styles.descriptionBox}>
@@ -1710,9 +1465,7 @@ export function ProductRecipe({
           </View>
         )}
 
-        {/* ================================================ */}
-        {/* INGREDIENTS                                    */}
-        {/* ================================================ */}
+        {/* INGREDIENTS */}
 
         <View style={styles.recipeItems}>
           {recipe.items.map((item, index) => (
@@ -1744,9 +1497,7 @@ export function ProductRecipe({
           ))}
         </View>
 
-        {/* ================================================ */}
-        {/* HELPER                                          */}
-        {/* ================================================ */}
+        {/* HELPER */}
 
         <View style={styles.recipeReferenceHint}>
           <Ionicons
@@ -1763,9 +1514,7 @@ export function ProductRecipe({
           </Text>
         </View>
 
-        {/* ================================================ */}
-        {/* ACTIONS                                         */}
-        {/* ================================================ */}
+        {/* ACTIONS */}
 
         <View style={styles.cardActions}>
           <Pressable
@@ -1789,9 +1538,9 @@ export function ProductRecipe({
               pressed && styles.pressed,
             ]}
             onPress={handleDeleteRecipe}
-            disabled={disabled || isDeletingRecipe || isUpdatingProduct}
+            disabled={disabled || isDeletingRecipe}
           >
-            {isDeletingRecipe || isUpdatingProduct ? (
+            {isDeletingRecipe ? (
               <ActivityIndicator size="small" color={COLORS.error} />
             ) : (
               <Ionicons name="trash-outline" size={17} color={COLORS.error} />
@@ -1812,9 +1561,9 @@ export function ProductRecipe({
 // ============================================================
 
 const styles = StyleSheet.create({
-  // ========================================================
+  // ==========================================================
   // MAIN CARD
-  // ========================================================
+  // ==========================================================
 
   card: {
     marginTop: 18,
@@ -1880,9 +1629,9 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ========================================================
+  // ==========================================================
   // REFERENCE VOLUME MAIN
-  // ========================================================
+  // ==========================================================
 
   mainReferenceBox: {
     marginHorizontal: 16,
@@ -1936,9 +1685,9 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ========================================================
+  // ==========================================================
   // NO RECIPE
-  // ========================================================
+  // ==========================================================
 
   noRecipeContent: {
     alignItems: "center",
@@ -1994,33 +1743,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
 
-  // ========================================================
-  // WARNING
-  // ========================================================
-
-  warningContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    margin: 16,
-    padding: 13,
-    borderRadius: 14,
-    backgroundColor: "#FFF8E8",
-    borderWidth: 1,
-    borderColor: "#F3E3B7",
-  },
-
-  warningText: {
-    flex: 1,
-    fontFamily: fonts.medium,
-    fontSize: 10.5,
-    lineHeight: 15,
-    color: "#80691D",
-  },
-
-  // ========================================================
+  // ==========================================================
   // DESCRIPTION
-  // ========================================================
+  // ==========================================================
 
   descriptionBox: {
     flexDirection: "row",
@@ -2041,9 +1766,9 @@ const styles = StyleSheet.create({
     color: COLORS.darkGray,
   },
 
-  // ========================================================
+  // ==========================================================
   // RECIPE ITEMS
-  // ========================================================
+  // ==========================================================
 
   recipeItems: {
     paddingHorizontal: 16,
@@ -2111,9 +1836,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // RECIPE REFERENCE HINT
-  // ========================================================
+  // ==========================================================
 
   recipeReferenceHint: {
     flexDirection: "row",
@@ -2134,9 +1859,9 @@ const styles = StyleSheet.create({
     color: COLORS.darkGray,
   },
 
-  // ========================================================
+  // ==========================================================
   // CARD ACTIONS
-  // ========================================================
+  // ==========================================================
 
   cardActions: {
     flexDirection: "row",
@@ -2185,9 +1910,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray,
   },
 
-  // ========================================================
+  // ==========================================================
   // LOADING
-  // ========================================================
+  // ==========================================================
 
   loadingRow: {
     minHeight: 80,
@@ -2203,9 +1928,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // MODAL ROOT
-  // ========================================================
+  // ==========================================================
 
   modalRoot: {
     flex: 1,
@@ -2217,10 +1942,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.42)",
   },
 
-  // ========================================================
-  // MODAL CONTAINER
-  // ========================================================
-
   modalContainer: {
     width: "100%",
     height: "91%",
@@ -2230,9 +1951,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  // ========================================================
+  // ==========================================================
   // MODAL HEADER
-  // ========================================================
+  // ==========================================================
 
   modalHeader: {
     minHeight: 78,
@@ -2284,9 +2005,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F4F1",
   },
 
-  // ========================================================
+  // ==========================================================
   // MODAL SCROLL
-  // ========================================================
+  // ==========================================================
 
   modalScroll: {
     flex: 1,
@@ -2301,9 +2022,9 @@ const styles = StyleSheet.create({
     height: 20,
   },
 
-  // ========================================================
+  // ==========================================================
   // SECTIONS
-  // ========================================================
+  // ==========================================================
 
   section: {
     marginBottom: 14,
@@ -2374,9 +2095,9 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ========================================================
+  // ==========================================================
   // INPUTS
-  // ========================================================
+  // ==========================================================
 
   inputLabel: {
     marginBottom: 6,
@@ -2416,9 +2137,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // REFERENCE VOLUME INPUT
-  // ========================================================
+  // ==========================================================
 
   volumeInputContainer: {
     height: 45,
@@ -2484,9 +2205,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // REFERENCE SUMMARY MODAL
-  // ========================================================
+  // ==========================================================
 
   referenceVolumeBox: {
     marginBottom: 12,
@@ -2539,9 +2260,9 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ========================================================
+  // ==========================================================
   // ITEMS
-  // ========================================================
+  // ==========================================================
 
   itemsList: {
     gap: 9,
@@ -2657,9 +2378,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // EMPTY ITEMS
-  // ========================================================
+  // ==========================================================
 
   emptyItems: {
     alignItems: "center",
@@ -2698,9 +2419,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ========================================================
+  // ==========================================================
   // ADD BOX
-  // ========================================================
+  // ==========================================================
 
   addBox: {
     marginTop: 12,
@@ -2746,9 +2467,9 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ========================================================
+  // ==========================================================
   // SELECT
-  // ========================================================
+  // ==========================================================
 
   selectButton: {
     minHeight: 45,
@@ -2793,9 +2514,9 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
 
-  // ========================================================
+  // ==========================================================
   // PICKER
-  // ========================================================
+  // ==========================================================
 
   pickerContainer: {
     marginTop: 8,
@@ -2914,9 +2635,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ========================================================
+  // ==========================================================
   // ADD QUANTITY
-  // ========================================================
+  // ==========================================================
 
   quantityAddRow: {
     flexDirection: "row",
@@ -2991,9 +2712,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // HELPER
-  // ========================================================
+  // ==========================================================
 
   helperBox: {
     flexDirection: "row",
@@ -3011,9 +2732,9 @@ const styles = StyleSheet.create({
     color: COLORS.Gray,
   },
 
-  // ========================================================
+  // ==========================================================
   // ERROR FIXE
-  // ========================================================
+  // ==========================================================
 
   errorArea: {
     minHeight: 54,
@@ -3044,9 +2765,9 @@ const styles = StyleSheet.create({
     color: COLORS.error,
   },
 
-  // ========================================================
+  // ==========================================================
   // FOOTER FIXE
-  // ========================================================
+  // ==========================================================
 
   modalFooter: {
     minHeight: 70,
@@ -3105,9 +2826,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
 
-  // ========================================================
+  // ==========================================================
   // GENERAL
-  // ========================================================
+  // ==========================================================
 
   pressed: {
     opacity: 0.55,

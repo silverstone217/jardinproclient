@@ -1,5 +1,5 @@
-export const ENDPOINT_URL =
-  /*"http://192.168.1.66:3000/api/v1";*/ process.env.EXPO_PUBLIC_ENDPOINT_URL!;
+export const ENDPOINT_URL = "https://jps-omega.vercel.app/api/v1";
+/*"http://192.168.1.66:3000/api/v1";*/ /*process.env.EXPO_PUBLIC_ENDPOINT_URL!;*/
 
 export const DEFAULT_SHOP_LOGO =
   process.env.EXPO_PUBLIC_DEFAULT_SHOP_LOGO ??

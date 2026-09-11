@@ -14,6 +14,10 @@ import type {
 
 const STORAGE_KEY = "jardin-recipes-storage";
 
+// ============================================================
+// STATE
+// ============================================================
+
 interface RecipeState {
   recipes: Recipe[];
 
@@ -44,9 +48,9 @@ interface RecipeState {
   reset: () => Promise<void>;
 }
 
-// ========================================================
+// ============================================================
 // NORMALISATION
-// ========================================================
+// ============================================================
 
 const normalizeRecipe = (recipe: Recipe): Recipe => ({
   ...recipe,
@@ -64,9 +68,9 @@ const normalizeRecipe = (recipe: Recipe): Recipe => ({
 const normalizeRecipes = (recipes: Recipe[]): Recipe[] =>
   recipes.map(normalizeRecipe);
 
-// ========================================================
+// ============================================================
 // CACHE
-// ========================================================
+// ============================================================
 
 const saveCache = async (recipes: Recipe[]) => {
   try {
@@ -103,9 +107,9 @@ const loadCache = async (): Promise<Recipe[]> => {
   }
 };
 
-// ========================================================
+// ============================================================
 // REMPLACER UNE RECETTE
-// ========================================================
+// ============================================================
 
 const replaceRecipe = (recipes: Recipe[], recipe: Recipe): Recipe[] => {
   const normalizedRecipe = normalizeRecipe(recipe);
@@ -123,9 +127,9 @@ const replaceRecipe = (recipes: Recipe[], recipe: Recipe): Recipe[] => {
   return next;
 };
 
-// ========================================================
+// ============================================================
 // STORE
-// ========================================================
+// ============================================================
 
 export const useRecipeStore = create<RecipeState>()((set, get) => ({
   recipes: [],
@@ -141,9 +145,9 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
   error: null,
 
-  // ==================================================
+  // ======================================================
   // INITIALISATION
-  // ==================================================
+  // ======================================================
 
   initialize: async () => {
     if (get().isInitialized) {
@@ -156,6 +160,10 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     });
 
     try {
+      // --------------------------------------------------
+      // 1. Charger immédiatement le cache
+      // --------------------------------------------------
+
       const cachedRecipes = await loadCache();
 
       if (cachedRecipes.length > 0) {
@@ -163,6 +171,10 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
           recipes: cachedRecipes,
         });
       }
+
+      // --------------------------------------------------
+      // 2. Synchroniser avec le serveur
+      // --------------------------------------------------
 
       try {
         const response = await api.get<RecipesResponse>("/recipes");
@@ -179,6 +191,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
         set({
           recipes,
+
           isOffline: false,
           isInitialized: true,
           isLoading: false,
@@ -211,17 +224,17 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     }
   },
 
-  // ==================================================
+  // ======================================================
   // FETCH
-  // ==================================================
+  // ======================================================
 
   fetchRecipes: async () => {
-    try {
-      set({
-        isLoading: true,
-        error: null,
-      });
+    set({
+      isLoading: true,
+      error: null,
+    });
 
+    try {
       const response = await api.get<RecipesResponse>("/recipes");
 
       const result = response.data;
@@ -236,6 +249,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       set({
         recipes,
+
         isLoading: false,
         isOffline: false,
         isInitialized: true,
@@ -244,11 +258,14 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       await saveCache(recipes);
     } catch (error) {
+      console.warn("Impossible de synchroniser les recettes.", error);
+
       const cachedRecipes = await loadCache();
 
       if (cachedRecipes.length > 0) {
         set({
           recipes: cachedRecipes,
+
           isLoading: false,
           isOffline: true,
           isInitialized: true,
@@ -262,6 +279,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
         isLoading: false,
         isOffline: true,
         isInitialized: true,
+
         error:
           error instanceof Error
             ? error.message
@@ -272,9 +290,9 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     }
   },
 
-  // ==================================================
+  // ======================================================
   // REFRESH
-  // ==================================================
+  // ======================================================
 
   refreshRecipes: async () => {
     if (get().isRefreshing) {
@@ -301,8 +319,10 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       set({
         recipes,
+
         isRefreshing: false,
         isOffline: false,
+        isInitialized: true,
         error: null,
       });
 
@@ -318,15 +338,15 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     }
   },
 
-  // ==================================================
+  // ======================================================
   // GET BY ID
-  // ==================================================
+  // ======================================================
 
   getRecipeById: (id) => get().recipes.find((recipe) => recipe.id === id),
 
-  // ==================================================
+  // ======================================================
   // CREATE
-  // ==================================================
+  // ======================================================
 
   createRecipe: async (data) => {
     if (get().isCreating) {
@@ -339,6 +359,21 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     });
 
     try {
+      /*
+       * data contient maintenant :
+       *
+       * {
+       *   productId,
+       *   name,
+       *   description,
+       *   productionVolumeMl,
+       *   items
+       * }
+       *
+       * Le store envoie directement ce payload
+       * à POST /recipes.
+       */
+
       const response = await api.post<RecipeResponse>("/recipes", data);
 
       const result = response.data;
@@ -353,6 +388,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       set({
         recipes,
+
         isCreating: false,
         isOffline: false,
         error: null,
@@ -366,6 +402,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       set({
         isCreating: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -376,9 +413,9 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     }
   },
 
-  // ==================================================
+  // ======================================================
   // UPDATE
-  // ==================================================
+  // ======================================================
 
   updateRecipe: async (id, data) => {
     if (get().isUpdating) {
@@ -428,9 +465,9 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     }
   },
 
-  // ==================================================
+  // ======================================================
   // DELETE
-  // ==================================================
+  // ======================================================
 
   deleteRecipe: async (id) => {
     if (get().isDeleting) {
@@ -459,6 +496,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       set({
         recipes,
+
         isDeleting: false,
         isOffline: false,
         error: null,
@@ -472,6 +510,7 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
 
       set({
         isDeleting: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -482,9 +521,9 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     }
   },
 
-  // ==================================================
+  // ======================================================
   // ERROR
-  // ==================================================
+  // ======================================================
 
   clearError: () => {
     set({
@@ -492,9 +531,9 @@ export const useRecipeStore = create<RecipeState>()((set, get) => ({
     });
   },
 
-  // ==================================================
+  // ======================================================
   // RESET
-  // ==================================================
+  // ======================================================
 
   reset: async () => {
     set({

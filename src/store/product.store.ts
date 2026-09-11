@@ -52,16 +52,44 @@ interface ProductState {
   reset: () => Promise<void>;
 }
 
+// ======================================================
+// NORMALISATION
+// ======================================================
+
 const normalizeVariant = (
   variant: Product["variants"][number],
 ): Product["variants"][number] => ({
   ...variant,
+
   price: Number(variant.price),
+
   shelfLifeDays: Number(variant.shelfLifeDays),
 });
 
+const normalizeRecipe = (recipe: Product["recipe"]): Product["recipe"] => {
+  if (!recipe) {
+    return null;
+  }
+
+  return {
+    ...recipe,
+
+    productionVolumeMl: Number(recipe.productionVolumeMl),
+
+    items: Array.isArray(recipe.items)
+      ? recipe.items.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity),
+        }))
+      : [],
+  };
+};
+
 const normalizeProduct = (product: Product): Product => ({
   ...product,
+
+  recipe: normalizeRecipe(product.recipe),
+
   variants: Array.isArray(product.variants)
     ? product.variants.map(normalizeVariant)
     : [],
@@ -69,6 +97,10 @@ const normalizeProduct = (product: Product): Product => ({
 
 const normalizeProducts = (products: Product[]): Product[] =>
   products.map(normalizeProduct);
+
+// ======================================================
+// CACHE
+// ======================================================
 
 const saveCache = async (products: Product[]) => {
   try {
@@ -105,6 +137,10 @@ const loadCache = async (): Promise<Product[]> => {
   }
 };
 
+// ======================================================
+// HELPERS
+// ======================================================
+
 const replaceProduct = (products: Product[], product: Product): Product[] => {
   const normalizedProduct = normalizeProduct(product);
 
@@ -121,6 +157,10 @@ const replaceProduct = (products: Product[], product: Product): Product[] => {
   return next;
 };
 
+// ======================================================
+// STORE
+// ======================================================
+
 export const useProductStore = create<ProductState>()((set, get) => ({
   products: [],
 
@@ -136,9 +176,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
   error: null,
 
-  // ========================================================
+  // ==================================================
   // INITIALISATION
-  // ========================================================
+  // ==================================================
 
   initialize: async () => {
     if (get().isInitialized) {
@@ -151,9 +191,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     });
 
     try {
-      // ----------------------------------------------------
-      // 1. Cache immédiat
-      // ----------------------------------------------------
+      // ------------------------------------------------
+      // 1. CACHE IMMÉDIAT
+      // ------------------------------------------------
 
       const cachedProducts = await loadCache();
 
@@ -163,9 +203,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
         });
       }
 
-      // ----------------------------------------------------
-      // 2. Synchronisation serveur
-      // ----------------------------------------------------
+      // ------------------------------------------------
+      // 2. SYNCHRONISATION SERVEUR
+      // ------------------------------------------------
 
       try {
         const response = await api.get<ProductsResponse>("/products");
@@ -182,9 +222,11 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
         set({
           products,
+
           isOffline: false,
           isInitialized: true,
           isLoading: false,
+
           error: null,
         });
 
@@ -214,9 +256,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // FETCH
-  // ========================================================
+  // ==================================================
 
   fetchProducts: async () => {
     try {
@@ -239,9 +281,11 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isLoading: false,
         isOffline: false,
         isInitialized: true,
+
         error: null,
       });
 
@@ -254,9 +298,11 @@ export const useProductStore = create<ProductState>()((set, get) => ({
       if (cachedProducts.length > 0) {
         set({
           products: cachedProducts,
+
           isLoading: false,
           isOffline: true,
           isInitialized: true,
+
           error: null,
         });
 
@@ -267,6 +313,7 @@ export const useProductStore = create<ProductState>()((set, get) => ({
         isLoading: false,
         isOffline: true,
         isInitialized: true,
+
         error:
           error instanceof Error
             ? error.message
@@ -277,9 +324,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // REFRESH
-  // ========================================================
+  // ==================================================
 
   refreshProducts: async () => {
     if (get().isRefreshing) {
@@ -306,9 +353,11 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isRefreshing: false,
         isOffline: false,
         isInitialized: true,
+
         error: null,
       });
 
@@ -324,15 +373,15 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // GET BY ID
-  // ========================================================
+  // ==================================================
 
   getProductById: (id) => get().products.find((product) => product.id === id),
 
-  // ========================================================
+  // ==================================================
   // CREATE
-  // ========================================================
+  // ==================================================
 
   createProduct: async (data) => {
     if (get().isCreating) {
@@ -359,8 +408,10 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isCreating: false,
         isOffline: false,
+
         error: null,
       });
 
@@ -372,6 +423,7 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         isCreating: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -382,9 +434,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // UPDATE
-  // ========================================================
+  // ==================================================
 
   updateProduct: async (id, data) => {
     if (get().isUpdating) {
@@ -414,8 +466,10 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isUpdating: false,
         isOffline: false,
+
         error: null,
       });
 
@@ -427,6 +481,7 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         isUpdating: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -437,21 +492,21 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // UPLOAD IMAGE
-  // ========================================================
+  // ==================================================
 
   updateProductImage: async (id, imageUri) => {
     if (get().isUploadingImage) {
       throw new Error("IMAGE_UPLOAD_ALREADY_IN_PROGRESS");
     }
 
-    try {
-      set({
-        isUploadingImage: true,
-        error: null,
-      });
+    set({
+      isUploadingImage: true,
+      error: null,
+    });
 
+    try {
       const formData = new FormData();
 
       formData.append("image", {
@@ -479,8 +534,10 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isUploadingImage: false,
         isOffline: false,
+
         error: null,
       });
 
@@ -492,6 +549,7 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         isUploadingImage: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -502,9 +560,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // REMOVE IMAGE
-  // ========================================================
+  // ==================================================
 
   removeProductImage: async (id) => {
     if (get().isUploadingImage) {
@@ -535,8 +593,10 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isUploadingImage: false,
         isOffline: false,
+
         error: null,
       });
 
@@ -548,6 +608,7 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         isUploadingImage: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -558,9 +619,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // DELETE
-  // ========================================================
+  // ==================================================
 
   deleteProduct: async (id) => {
     if (get().isDeleting) {
@@ -597,8 +658,10 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         products,
+
         isDeleting: false,
         isOffline: false,
+
         error: null,
       });
 
@@ -613,6 +676,7 @@ export const useProductStore = create<ProductState>()((set, get) => ({
 
       set({
         isDeleting: false,
+
         error:
           error instanceof Error
             ? error.message
@@ -623,9 +687,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     }
   },
 
-  // ========================================================
+  // ==================================================
   // ERROR
-  // ========================================================
+  // ==================================================
 
   clearError: () => {
     set({
@@ -633,9 +697,9 @@ export const useProductStore = create<ProductState>()((set, get) => ({
     });
   },
 
-  // ========================================================
+  // ==================================================
   // RESET
-  // ========================================================
+  // ==================================================
 
   reset: async () => {
     set({

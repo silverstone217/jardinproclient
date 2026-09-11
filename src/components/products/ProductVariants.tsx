@@ -233,7 +233,6 @@ export function ProductVariants({
     return {
       name: product.name,
       description: product.description ?? undefined,
-      recipeId: product.recipeId ?? undefined,
       isActive: product.isActive,
       variants,
     };

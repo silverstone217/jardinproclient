@@ -132,7 +132,6 @@ export function ProductInformation({
       const payload: UpdateProductPayload = {
         name: cleanName,
         description: cleanDescription || undefined,
-        recipeId: product.recipeId ?? undefined,
         isActive: product.isActive,
         variants,
       };
