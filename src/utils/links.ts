@@ -5,6 +5,7 @@ export type SettingsSection =
   | "business"
   | "catalog"
   | "inventory"
+  | "reports"
   | "customers"
   | "system";
 
@@ -21,6 +22,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
   // COMPTE
   // ─────────────────────────────────────
+
   {
     label: "Mon compte",
     value: "/settings/profile",
@@ -42,6 +44,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
   // BOUTIQUE & ORGANISATION
   // ─────────────────────────────────────
+
   {
     label: "Boutique",
     value: "/settings/shop",
@@ -72,6 +75,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
   // PRODUITS
   // ─────────────────────────────────────
+
   {
     label: "Produits",
     value: "/settings/products",
@@ -93,12 +97,13 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
   // STOCK & PRODUCTION
   // ─────────────────────────────────────
+
   {
     label: "Matières premières",
     value: "/settings/raw-material",
     description: "Gérer les fruits, ingrédients et autres matières premières",
     icon: "package",
-    section: "inventory",
+    section: "catalog",
     roles: ["MANAGER"],
   },
 
@@ -139,8 +144,22 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   },
 
   // ─────────────────────────────────────
+  // RAPPORTS & EXPORTS
+  // ─────────────────────────────────────
+
+  {
+    label: "Rapports & exports",
+    value: "/settings/reports",
+    description: "Consulter, imprimer et exporter les données de la boutique",
+    icon: "file-text",
+    section: "reports",
+    roles: ["MANAGER"],
+  },
+
+  // ─────────────────────────────────────
   // CLIENTS & FIDÉLITÉ
   // ─────────────────────────────────────
+
   {
     label: "Clients",
     value: "/settings/customers",
@@ -162,6 +181,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
   // APPLICATION
   // ─────────────────────────────────────
+
   {
     label: "Notifications",
     value: "/settings/notifications",
@@ -209,6 +229,12 @@ export const SECTION_CONFIG: Record<
       "Gérez les matières premières, la production et la distribution",
   },
 
+  reports: {
+    title: "Rapports & exports",
+    description:
+      "Consultez, imprimez et exportez les données de votre boutique",
+  },
+
   customers: {
     title: "Clients & fidélité",
     description: "Gérez vos clients et votre programme de fidélité",
@@ -225,6 +251,7 @@ export const SECTION_ORDER: SettingsSection[] = [
   "business",
   "catalog",
   "inventory",
+  "reports",
   "customers",
   "system",
 ];

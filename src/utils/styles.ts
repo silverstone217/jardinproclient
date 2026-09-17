@@ -106,6 +106,11 @@ export const SETTINGS_COLORS = {
     icon: "#D88A00",
   },
 
+  reports: {
+    background: "#EDEAF8",
+    icon: "#6657A8",
+  },
+
   customers: {
     background: "#E8F1FB",
     icon: "#3478C5",

@@ -6,6 +6,7 @@ import Feather from "react-native-vector-icons/Feather";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, Tabs } from "expo-router";
 import React from "react";
 import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
@@ -16,6 +17,15 @@ const MainLayout = () => {
 
   if (!user) {
     return <Redirect href="/auth" />;
+  }
+
+  async function deletecach() {
+    try {
+      await AsyncStorage.removeItem("jardin-stock-cache");
+      console.log("Supprime");
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   return (
@@ -78,6 +88,7 @@ const MainLayout = () => {
                       pressed && styles.pressed,
                     ]}
                     hitSlop={8}
+                    onPress={deletecach}
                   >
                     <Ionicons
                       name="notifications-outline"
