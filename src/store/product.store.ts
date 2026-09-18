@@ -65,7 +65,6 @@ const normalizeVariant = (
 
   shelfLifeDays: Number(variant.shelfLifeDays),
 });
-
 const normalizeRecipe = (recipe: Product["recipe"]): Product["recipe"] => {
   if (!recipe) {
     return null;
@@ -84,7 +83,6 @@ const normalizeRecipe = (recipe: Product["recipe"]): Product["recipe"] => {
       : [],
   };
 };
-
 const normalizeProduct = (product: Product): Product => ({
   ...product,
 
@@ -94,7 +92,6 @@ const normalizeProduct = (product: Product): Product => ({
     ? product.variants.map(normalizeVariant)
     : [],
 });
-
 const normalizeProducts = (products: Product[]): Product[] =>
   products.map(normalizeProduct);
 
@@ -114,7 +111,6 @@ const saveCache = async (products: Product[]) => {
     console.error("Erreur sauvegarde cache produits :", error);
   }
 };
-
 const loadCache = async (): Promise<Product[]> => {
   try {
     const storage = await AsyncStorage.getItem(STORAGE_KEY);

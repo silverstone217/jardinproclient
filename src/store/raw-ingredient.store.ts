@@ -1,7 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { create } from "zustand";
-
 import { api } from "@/utils/api";
 
 import type {
@@ -63,15 +61,6 @@ interface RawIngredientState {
   reset: () => Promise<void>;
 }
 
-/**
- * Garantit que les données utilisées par l'application
- * respectent toujours le contrat RawIngredient.
- *
- * Le backend doit déjà envoyer des numbers.
- * Cette normalisation protège également contre :
- * - anciennes données du cache
- * - API renvoyant exceptionnellement une string numérique
- */
 const normalizeRawIngredient = (ingredient: RawIngredient): RawIngredient => {
   return {
     ...ingredient,

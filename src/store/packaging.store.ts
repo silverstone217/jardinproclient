@@ -12,7 +12,6 @@ import type {
 } from "@/types/packaging";
 
 const STORAGE_KEY = "jardin-packagings-storage";
-
 interface PackagingState {
   packagings: Packaging[];
 
@@ -66,11 +65,9 @@ const normalizePackaging = (packaging: Packaging): Packaging => {
     minAlert: Number(packaging.minAlert),
   };
 };
-
 const normalizePackagings = (packagings: Packaging[]): Packaging[] => {
   return packagings.map(normalizePackaging);
 };
-
 const saveCache = async (packagings: Packaging[]) => {
   try {
     await AsyncStorage.setItem(
@@ -83,7 +80,6 @@ const saveCache = async (packagings: Packaging[]) => {
     console.error("Erreur sauvegarde cache emballages :", error);
   }
 };
-
 const loadCache = async (): Promise<Packaging[]> => {
   try {
     const storage = await AsyncStorage.getItem(STORAGE_KEY);
@@ -105,7 +101,6 @@ const loadCache = async (): Promise<Packaging[]> => {
     return [];
   }
 };
-
 const replacePackaging = (packagings: Packaging[], packaging: Packaging) => {
   const normalizedPackaging = normalizePackaging(packaging);
 

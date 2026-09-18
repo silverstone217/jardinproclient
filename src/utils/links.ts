@@ -255,3 +255,73 @@ export const SECTION_ORDER: SettingsSection[] = [
   "customers",
   "system",
 ];
+
+/**
+ * ORDERS / COMMANDES LINKS
+ */
+export type OrderScreen =
+  | "products"
+  | "customer"
+  | "loyalty"
+  | "preview"
+  | "invoice";
+
+export type OrderLink = {
+  label: string;
+  value: string;
+  description?: string;
+  icon: string;
+  screen: OrderScreen;
+  roles: UserRole[];
+};
+
+export const ORDER_LINKS: OrderLink[] = [
+  // ─────────────────────────────────────
+  // COMMANDE
+  // ─────────────────────────────────────
+
+  {
+    label: "Produits",
+    value: "/commandes",
+    description: "Choisir les jus à ajouter à la commande",
+    icon: "shopping-cart",
+    screen: "products",
+    roles: ["MANAGER", "EMPLOYEE"],
+  },
+
+  {
+    label: "Client",
+    value: "/commandes/client",
+    description: "Rechercher ou enregistrer le client",
+    icon: "user",
+    screen: "customer",
+    roles: ["MANAGER", "EMPLOYEE"],
+  },
+
+  {
+    label: "Fidélité",
+    value: "/commandes/loyalty",
+    description: "Consulter et utiliser les points de fidélité",
+    icon: "star",
+    screen: "loyalty",
+    roles: ["MANAGER", "EMPLOYEE"],
+  },
+
+  {
+    label: "Aperçu",
+    value: "/commandes/preview",
+    description: "Vérifier la commande avant validation",
+    icon: "file-text",
+    screen: "preview",
+    roles: ["MANAGER", "EMPLOYEE"],
+  },
+
+  {
+    label: "Facture",
+    value: "/commandes/facture",
+    description: "Consulter la facture et l'envoyer au client",
+    icon: "receipt",
+    screen: "invoice",
+    roles: ["MANAGER", "EMPLOYEE"],
+  },
+];
