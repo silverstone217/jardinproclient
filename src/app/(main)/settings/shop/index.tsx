@@ -18,6 +18,7 @@ import ShopLogo from "@/components/shop/ShopLogo";
 import { useShopStore } from "@/store/shop.store";
 import { useUserStore } from "@/store/user.store";
 
+import ShopLoyalty from "@/components/shop/ShopLoyalty";
 import { COLORS, fonts } from "@/utils/styles";
 
 export default function ShopScreen() {
@@ -46,9 +47,6 @@ export default function ShopScreen() {
 
   /*
    * On initialise uniquement les données distantes.
-   *
-   * Le store possède déjà son cache local grâce à Zustand persist.
-   * Le composant ne recopie donc aucune donnée dans un useState.
    */
   useEffect(() => {
     fetchShop().catch(() => {});
@@ -121,6 +119,24 @@ export default function ShopScreen() {
       await removeShopLogo();
     } catch {}
   };
+
+  // DISABLED IF NO CHANGED
+  const hasChanges =
+    shop !== null &&
+    draft !== null &&
+    (draft.name.trim() !== shop.name ||
+      draft.slogan.trim() !== (shop.slogan ?? "") ||
+      draft.telephone.trim() !== shop.telephone ||
+      draft.email.trim() !== (shop.email ?? "") ||
+      draft.address.trim() !== shop.address ||
+      draft.currency !== shop.currency ||
+      Number(draft.loyaltyPurchaseAmount) !==
+        Number(shop.loyaltyPurchaseAmount) ||
+      Number(draft.loyaltyPointsEarned) !== Number(shop.loyaltyPointsEarned) ||
+      Number(draft.loyaltyPointsForDiscount) !==
+        Number(shop.loyaltyPointsForDiscount) ||
+      Number(draft.loyaltyDiscountAmount) !==
+        Number(shop.loyaltyDiscountAmount));
 
   if (isLoading && !shop) {
     return (
@@ -270,7 +286,31 @@ export default function ShopScreen() {
         />
 
         {/* ================================================== */}
-        {/* SAVE */}
+        {/* Loyalities */}
+        {/* ================================================== */}
+
+        <ShopLoyalty
+          purchaseAmount={draft.loyaltyPurchaseAmount}
+          pointsEarned={draft.loyaltyPointsEarned}
+          pointsForDiscount={draft.loyaltyPointsForDiscount}
+          discountAmount={draft.loyaltyDiscountAmount}
+          editable={isManager}
+          onPurchaseAmountChange={(value) =>
+            updateDraft("loyaltyPurchaseAmount", value)
+          }
+          onPointsEarnedChange={(value) =>
+            updateDraft("loyaltyPointsEarned", value)
+          }
+          onPointsForDiscountChange={(value) =>
+            updateDraft("loyaltyPointsForDiscount", value)
+          }
+          onDiscountAmountChange={(value) =>
+            updateDraft("loyaltyDiscountAmount", value)
+          }
+        />
+
+        {/* ================================================== */}
+        {/* SAVE                                               */}
         {/* ================================================== */}
 
         {isManager && (
@@ -278,19 +318,24 @@ export default function ShopScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.saveButton,
-                isSaving && styles.disabled,
-                pressed && styles.pressed,
+                (!hasChanges || isSaving) && styles.disabled,
+                pressed && hasChanges && !isSaving && styles.pressed,
               ]}
               onPress={handleSave}
-              disabled={isSaving}
+              disabled={!hasChanges || isSaving}
             >
               <MaterialCommunityIcons
                 name={isSaving ? "loading" : "content-save-outline"}
                 size={20}
-                color={COLORS.white}
+                color={!hasChanges || isSaving ? COLORS.Gray : COLORS.white}
               />
 
-              <Text style={styles.saveText}>
+              <Text
+                style={[
+                  styles.saveText,
+                  (!hasChanges || isSaving) && styles.saveTextDisabled,
+                ]}
+              >
                 {isSaving
                   ? "Enregistrement..."
                   : "Enregistrer les modifications"}
@@ -300,12 +345,18 @@ export default function ShopScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.cancelButton,
-                pressed && styles.pressed,
+                !hasChanges && styles.cancelButtonDisabled,
+                pressed && hasChanges && !isSaving && styles.pressed,
               ]}
               onPress={handleCancelChanges}
-              disabled={isSaving}
+              disabled={isSaving || !hasChanges}
             >
-              <Text style={styles.cancelText}>
+              <Text
+                style={[
+                  styles.cancelText,
+                  !hasChanges && styles.cancelTextDisabled,
+                ]}
+              >
                 Réinitialiser les modifications
               </Text>
             </Pressable>
@@ -422,40 +473,65 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 
+  // cancelText: {
+  //   fontFamily: fonts.medium,
+  //   fontSize: 12,
+  //   color: COLORS.Gray,
+  // },
+
+  // disabled: {
+  //   opacity: 0.6,
+  // },
+
+  pressed: {
+    opacity: 0.7,
+  },
+
+  // button save
   saveButton: {
-    minHeight: 54,
-    borderRadius: 16,
+    minHeight: 52,
+    borderRadius: 15,
+    backgroundColor: COLORS.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 9,
-    backgroundColor: COLORS.primary,
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+
+  disabled: {
+    backgroundColor: COLORS.lightGray,
   },
 
   saveText: {
     fontFamily: fonts.semibold,
-    fontSize: 14,
+    fontSize: 12.5,
     color: COLORS.white,
   },
 
-  cancelButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-  },
-
-  cancelText: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
+  saveTextDisabled: {
     color: COLORS.Gray,
   },
 
-  disabled: {
-    opacity: 0.6,
+  cancelButton: {
+    minHeight: 44,
+    marginTop: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  pressed: {
-    opacity: 0.7,
+  cancelButtonDisabled: {
+    opacity: 0.5,
+  },
+
+  cancelText: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: COLORS.primary,
+  },
+
+  cancelTextDisabled: {
+    color: COLORS.Gray,
   },
 
   footer: {

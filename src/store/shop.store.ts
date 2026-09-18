@@ -1,15 +1,13 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
-
-import { api } from "@/utils/api";
-
 import type {
   Shop,
   ShopCurrency,
   ShopResponse,
   UpdateShopPayload,
 } from "@/types/shop";
+import { api } from "@/utils/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 interface ShopDraft {
   name: string;
@@ -18,6 +16,11 @@ interface ShopDraft {
   email: string;
   address: string;
   currency: ShopCurrency;
+
+  loyaltyPurchaseAmount: number;
+  loyaltyPointsEarned: number;
+  loyaltyPointsForDiscount: number;
+  loyaltyDiscountAmount: number;
 }
 
 interface ShopState {
@@ -38,17 +41,18 @@ interface ShopState {
     field: K,
     value: ShopDraft[K],
   ) => void;
-
   resetDraft: () => void;
-
   saveShop: () => Promise<void>;
-
   updateShopLogo: (imageUri: string) => Promise<void>;
-  removeShopLogo: () => Promise<void>;
 
+  removeShopLogo: () => Promise<void>;
   clearError: () => void;
   reset: () => void;
 }
+
+// ============================================================
+// CREATE DRAFT
+// ============================================================
 
 const createDraftFromShop = (shop: Shop): ShopDraft => ({
   name: shop.name,
@@ -57,7 +61,20 @@ const createDraftFromShop = (shop: Shop): ShopDraft => ({
   email: shop.email ?? "",
   address: shop.address,
   currency: shop.currency,
+
+  // ==========================================================
+  // FIDÉLITÉ
+  // ==========================================================
+
+  loyaltyPurchaseAmount: Number(shop.loyaltyPurchaseAmount),
+  loyaltyPointsEarned: Number(shop.loyaltyPointsEarned),
+  loyaltyPointsForDiscount: Number(shop.loyaltyPointsForDiscount),
+  loyaltyDiscountAmount: Number(shop.loyaltyDiscountAmount),
 });
+
+// ============================================================
+// ERROR
+// ============================================================
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error && typeof error === "object" && "response" in error) {
@@ -83,6 +100,10 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+// ============================================================
+// STORE
+// ============================================================
+
 export const useShopStore = create<ShopState>()(
   persist(
     (set, get) => ({
@@ -96,9 +117,9 @@ export const useShopStore = create<ShopState>()(
 
       error: null,
 
-      // ========================================================
+      // ====================================================
       // GET SHOP
-      // ========================================================
+      // ====================================================
 
       fetchShop: async () => {
         try {
@@ -132,9 +153,9 @@ export const useShopStore = create<ShopState>()(
         }
       },
 
-      // ========================================================
+      // ====================================================
       // REFRESH
-      // ========================================================
+      // ====================================================
 
       refreshShop: async () => {
         try {
@@ -168,9 +189,9 @@ export const useShopStore = create<ShopState>()(
         }
       },
 
-      // ========================================================
+      // ====================================================
       // LOCAL DRAFT
-      // ========================================================
+      // ====================================================
 
       updateDraft: (field, value) => {
         const currentDraft = get().draft;
@@ -187,9 +208,9 @@ export const useShopStore = create<ShopState>()(
         });
       },
 
-      // ========================================================
+      // ====================================================
       // RESET DRAFT
-      // ========================================================
+      // ====================================================
 
       resetDraft: () => {
         const shop = get().shop;
@@ -203,9 +224,9 @@ export const useShopStore = create<ShopState>()(
         });
       },
 
-      // ========================================================
+      // ====================================================
       // SAVE
-      // ========================================================
+      // ====================================================
 
       saveShop: async () => {
         const draft = get().draft;
@@ -222,11 +243,28 @@ export const useShopStore = create<ShopState>()(
 
           const payload: UpdateShopPayload = {
             name: draft.name.trim(),
+
             slogan: draft.slogan.trim(),
+
             telephone: draft.telephone.trim(),
+
             email: draft.email.trim(),
+
             address: draft.address.trim(),
+
             currency: draft.currency,
+
+            // ==================================================
+            // FIDÉLITÉ
+            // ==================================================
+
+            loyaltyPurchaseAmount: Number(draft.loyaltyPurchaseAmount),
+
+            loyaltyPointsEarned: Number(draft.loyaltyPointsEarned),
+
+            loyaltyPointsForDiscount: Number(draft.loyaltyPointsForDiscount),
+
+            loyaltyDiscountAmount: Number(draft.loyaltyDiscountAmount),
           };
 
           const response = await api.patch<ShopResponse>("/shop", payload);
@@ -254,9 +292,9 @@ export const useShopStore = create<ShopState>()(
         }
       },
 
-      // ========================================================
+      // ====================================================
       // LOGO
-      // ========================================================
+      // ====================================================
 
       updateShopLogo: async (imageUri) => {
         try {
@@ -301,9 +339,9 @@ export const useShopStore = create<ShopState>()(
         }
       },
 
-      // ========================================================
+      // ====================================================
       // REMOVE LOGO
-      // ========================================================
+      // ====================================================
 
       removeShopLogo: async () => {
         try {
@@ -337,9 +375,9 @@ export const useShopStore = create<ShopState>()(
         }
       },
 
-      // ========================================================
+      // ====================================================
       // HELPERS
-      // ========================================================
+      // ====================================================
 
       clearError: () => {
         set({
@@ -351,16 +389,19 @@ export const useShopStore = create<ShopState>()(
         set({
           shop: null,
           draft: null,
+
           isLoading: false,
           isRefreshing: false,
           isSaving: false,
           isUploadingImage: false,
+
           error: null,
         });
       },
     }),
     {
       name: "jardin-shop-storage",
+
       storage: createJSONStorage(() => AsyncStorage),
 
       partialize: (state) => ({
