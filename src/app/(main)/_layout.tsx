@@ -7,13 +7,14 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, Tabs, useRouter } from "expo-router";
 import React from "react";
 import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const MainLayout = () => {
   const user = useUserStore((state) => state.user);
+  const router = useRouter();
 
   if (!user) {
     return <Redirect href="/auth" />;
@@ -114,9 +115,13 @@ const MainLayout = () => {
 
         <Tabs.Screen
           name="orders"
+          listeners={{
+            tabPress: () => {
+              router.replace("/orders");
+            },
+          }}
           options={{
             title: "Commandes",
-
             tabBarIcon: ({ focused }) => (
               <TabIcon focused={focused} icon="shopping-bag" />
             ),
