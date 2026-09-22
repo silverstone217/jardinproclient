@@ -21,6 +21,7 @@ import { InvoicePaymentInfo } from "@/components/invoices/invoicePreview/Invoice
 import { InvoiceShopInfo } from "@/components/invoices/invoicePreview/InvoiceShopInfo";
 import { InvoiceTotals } from "@/components/invoices/invoicePreview/InvoiceTotals";
 import { useInvoiceStore } from "@/store/invoice.store";
+import { useShopStore } from "@/store/shop.store";
 import type { Invoice } from "@/types/invoice";
 import { InvoiceDocumentData } from "@/utils/invoice/invoice";
 import { openWhatsAppChat } from "@/utils/invoice/invoice.whatsapp";
@@ -28,12 +29,16 @@ import { saveInvoicePdf, shareInvoicePdf } from "@/utils/invoice/invoiceFile";
 import { generateInvoicePdf, printInvoice } from "@/utils/invoice/invoicePdf";
 import { COLORS, fonts } from "@/utils/styles";
 
-function toInvoiceDocumentData(invoice: Invoice): InvoiceDocumentData {
+function toInvoiceDocumentData(
+  invoice: Invoice,
+  shopLogo?: string | null,
+): InvoiceDocumentData {
   return {
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
     createdAt: invoice.createdAt,
     shopName: invoice.shop.name,
+    shopLogo: shopLogo ?? null,
     pointOfSaleName: invoice.pointOfSale.name,
     pointOfSaleAddress: invoice.pointOfSale.address,
     pointOfSaleTelephone: invoice.pointOfSale.telephone,
@@ -94,6 +99,8 @@ export default function InvoiceDetailScreen() {
     clearError,
     getInvoiceById,
   } = useInvoiceStore();
+
+  const { shop } = useShopStore();
 
   const [invoice, setInvoice] = useState<Invoice | null>(
     invoiceId ? (getInvoiceById(invoiceId) ?? null) : null,
@@ -171,7 +178,7 @@ export default function InvoiceDetailScreen() {
     try {
       setActiveAction("print");
 
-      const document = toInvoiceDocumentData(invoice);
+      const document = toInvoiceDocumentData(invoice, shop?.logo);
 
       const result = await printInvoice(document);
 
@@ -191,89 +198,111 @@ export default function InvoiceDetailScreen() {
   // PARTAGER / EXPORTER
   // ============================================================
 
-  const handleShare = useCallback(async () => {
-    if (!invoice) {
+  const handleShare = async () => {
+    if (!invoice || activeAction !== null) {
       return;
     }
 
     try {
       setActiveAction("share");
 
-      const document = toInvoiceDocumentData(invoice);
+      // Préparer les données du document
+      const invoiceData = toInvoiceDocumentData(invoice, shop?.logo);
 
-      // Génération du PDF temporaire
-      const pdf = await generateInvoicePdf(document);
+      // Générer le PDF
+      const pdf = await generateInvoicePdf(invoiceData);
 
-      if (!pdf.uri) {
-        throw new Error("INVOICE_PDF_URI_REQUIRED");
-      }
-
-      // Ouverture du menu de partage natif
+      // Ouvrir la feuille de partage native
       await shareInvoicePdf(pdf.uri, invoice.invoiceNumber);
-    } catch (actionError) {
-      console.error("Erreur partage facture :", actionError);
+    } catch (error) {
+      console.error("Erreur partage facture :", error);
 
-      Alert.alert("Erreur", "Impossible de partager cette facture.");
+      Alert.alert(
+        "Erreur",
+        "Impossible de partager la facture pour le moment.",
+      );
     } finally {
       setActiveAction(null);
     }
-  }, [invoice]);
+  };
 
   // ============================================================
   // ENREGISTRER LE PDF
   // ============================================================
 
   const handleSave = useCallback(async () => {
-    if (!invoice) {
+    if (!invoice || activeAction) {
       return;
     }
 
     try {
       setActiveAction("save");
 
-      const document = toInvoiceDocumentData(invoice);
-
-      // Générer le PDF
+      const document = toInvoiceDocumentData(invoice, shop?.logo);
       const pdf = await generateInvoicePdf(document);
 
       if (!pdf.uri) {
         throw new Error("INVOICE_PDF_URI_REQUIRED");
       }
 
-      // Enregistrer le PDF
       const result = await saveInvoicePdf(pdf.uri, invoice.invoiceNumber);
 
       if (result.status === "cancelled") {
         return;
       }
 
-      Alert.alert(
-        "Facture enregistrée",
-        "La facture PDF a été enregistrée avec succès.",
-      );
+      if (result.status === "saved") {
+        Alert.alert(
+          "Facture enregistrée",
+          `Le fichier ${result.fileName} a été enregistré dans le dossier choisi.`,
+        );
+
+        return;
+      }
+
+      if (result.status === "share-sheet-opened") {
+        Alert.alert(
+          "Exporter la facture",
+          `Le menu de partage iOS a été ouvert pour ${result.fileName}.\n\nSi vous avez choisi « Enregistrer dans Fichiers », vous pourrez retrouver le PDF dans le dossier sélectionné.`,
+        );
+      }
     } catch (actionError) {
       console.error("Erreur sauvegarde facture :", actionError);
 
-      Alert.alert("Erreur", "Impossible d'enregistrer cette facture en PDF.");
+      const message =
+        actionError instanceof Error
+          ? actionError.message
+          : String(actionError);
+
+      Alert.alert(
+        "Échec de la sauvegarde",
+        __DEV__
+          ? `Impossible d'enregistrer le PDF.\n\n${message}`
+          : "Impossible d'enregistrer cette facture. Vérifiez l'espace disponible et réessayez.",
+      );
     } finally {
       setActiveAction(null);
     }
-  }, [invoice]);
+  }, [invoice, activeAction]);
 
   // ============================================================
   // WHATSAPP
   // ============================================================
 
   const handleWhatsApp = useCallback(async () => {
-    if (!invoice) {
+    if (!invoice || activeAction) {
       return;
     }
 
-    const customerPhone = invoice.customer.phone?.trim();
+    // ----------------------------------------------------------
+    // Vérifier que la facture possède un numéro client
+    // ----------------------------------------------------------
+
+    const customerPhone = invoice.customer?.phone?.trim();
 
     if (!customerPhone) {
       Alert.alert(
-        "Client sans téléphone",
+        "Numéro client manquant",
         "Cette facture ne contient pas de numéro de téléphone client.",
       );
 
@@ -283,10 +312,14 @@ export default function InvoiceDetailScreen() {
     try {
       setActiveAction("whatsapp");
 
-      const document = toInvoiceDocumentData(invoice);
+      // --------------------------------------------------------
+      // 1. Préparer le document
+      // --------------------------------------------------------
+
+      const document = toInvoiceDocumentData(invoice, shop?.logo);
 
       // --------------------------------------------------------
-      // 1. Générer le PDF
+      // 2. Générer le PDF
       // --------------------------------------------------------
 
       const pdf = await generateInvoicePdf(document);
@@ -296,75 +329,67 @@ export default function InvoiceDetailScreen() {
       }
 
       // --------------------------------------------------------
-      // 2. Enregistrer le PDF
+      // 3. Exporter le PDF sur le téléphone
+      //
+      // IMPORTANT :
+      // Sur iPhone / Expo Go, cela ouvre la feuille iOS.
+      // L'utilisateur doit choisir :
+      //
+      //    Enregistrer dans Fichiers
+      //
+      // puis sélectionner l'emplacement.
       // --------------------------------------------------------
 
       const saveResult = await saveInvoicePdf(pdf.uri, invoice.invoiceNumber);
 
+      // L'utilisateur a annulé
       if (saveResult.status === "cancelled") {
         return;
       }
 
       // --------------------------------------------------------
-      // 3. Préparer le message WhatsApp
+      // 4. Préparer le message WhatsApp
       // --------------------------------------------------------
 
-      const customerName = invoice.customer.name?.trim();
-
-      const greeting = customerName ? `Bonjour ${customerName},` : "Bonjour,";
-
-      const message = [
-        greeting,
-        "",
-        `Voici votre facture ${invoice.invoiceNumber}.`,
-        `Montant total : ${formatInvoiceAmount(
-          invoice.totalAmount,
-          invoice.currency,
-        )}`,
-        "",
-        "Merci pour votre confiance !",
-        `Jardin Pro`,
-      ].join("\n");
+      const message =
+        `Bonjour,\n\n` +
+        `Veuillez trouver votre facture ` +
+        `${invoice.invoiceNumber} ` +
+        `d'un montant de ` +
+        `${invoice.totalAmount.toLocaleString("fr-FR")} ` +
+        `${invoice.currency}.\n\n` +
+        `Merci pour votre confiance.`;
 
       // --------------------------------------------------------
-      // 4. Ouvrir WhatsApp
+      // 5. Ouvrir WhatsApp directement sur le client
+      //
+      // Exemple :
+      // 0812345678
+      //       ↓
+      // 243812345678
+      //
+      // Le numéro n'a pas besoin d'être enregistré.
       // --------------------------------------------------------
 
       await openWhatsAppChat(customerPhone, message);
-
-      // --------------------------------------------------------
-      // IMPORTANT :
-      // Le PDF est déjà enregistré.
-      //
-      // WhatsApp ne permet pas à wa.me d'attacher
-      // automatiquement le fichier.
-      //
-      // L'utilisateur pourra donc joindre le PDF
-      // enregistré depuis WhatsApp.
-      // --------------------------------------------------------
     } catch (actionError) {
       console.error("Erreur WhatsApp facture :", actionError);
 
-      if (
-        actionError instanceof Error &&
-        actionError.message === "INVALID_WHATSAPP_PHONE"
-      ) {
-        Alert.alert(
-          "Numéro invalide",
-          "Le numéro du client n'est pas un numéro WhatsApp valide.",
-        );
-
-        return;
-      }
+      const errorMessage =
+        actionError instanceof Error
+          ? actionError.message
+          : String(actionError);
 
       Alert.alert(
-        "Erreur",
-        "Impossible de préparer l'envoi de la facture sur WhatsApp.",
+        "Échec de l'envoi",
+        __DEV__
+          ? `Impossible de préparer l'envoi de la facture.\n\n${errorMessage}`
+          : "Impossible de préparer l'envoi de cette facture. Vérifiez le numéro du client et réessayez.",
       );
     } finally {
       setActiveAction(null);
     }
-  }, [invoice]);
+  }, [invoice, activeAction]);
 
   // ============================================================
   // LOADING INITIAL

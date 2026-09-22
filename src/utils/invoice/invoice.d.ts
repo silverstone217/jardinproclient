@@ -55,59 +55,43 @@ export interface InvoiceDocumentLoyalty {
 // ============================================================
 
 export interface InvoiceDocumentData {
-  id?: string;
-
+  id: string;
   invoiceNumber: string;
-
   createdAt: string | Date;
 
-  // ==========================================================
-  // BOUTIQUE / PDV
-  // ==========================================================
-
   shopName: string;
+  shopLogo?: string | null;
 
   pointOfSaleName: string;
-  pointOfSaleAddress: string | null;
-  pointOfSaleTelephone: string | null;
+  pointOfSaleAddress?: string | null;
+  pointOfSaleTelephone?: string | null;
 
-  // Audit interne uniquement.
-  // Ne doit pas être affiché sur la facture client.
   sellerName?: string | null;
-
-  // ==========================================================
-  // MONTANTS
-  // ==========================================================
 
   currency: InvoiceDocumentCurrency;
 
   subtotal: number;
-
   discountAmount: number;
-
   totalAmount: number;
 
-  // ==========================================================
-  // CLIENT
-  // ==========================================================
-
-  customer: InvoiceDocumentCustomer;
-
-  // ==========================================================
-  // PAIEMENT
-  // ==========================================================
+  customer: {
+    name?: string | null;
+    phone?: string | null;
+  };
 
   paymentMethod: InvoiceDocumentPaymentMethod | null;
 
-  // ==========================================================
-  // FIDÉLITÉ
-  // ==========================================================
+  loyalty: {
+    pointsEarned: number;
+    pointsUsed: number;
+  };
 
-  loyalty: InvoiceDocumentLoyalty;
-
-  // ==========================================================
-  // ARTICLES
-  // ==========================================================
-
-  items: InvoiceDocumentItem[];
+  items: Array<{
+    productName: string;
+    size: InvoiceDocumentBottleSize;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    currency?: InvoiceDocumentCurrency;
+  }>;
 }

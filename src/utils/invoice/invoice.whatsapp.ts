@@ -1,49 +1,45 @@
-// src/utils/invoice/invoice.whatsapp.ts
-
 import { Linking } from "react-native";
 
-/**
- * Normalise un numéro congolais pour WhatsApp.
- *
- * Exemples :
- * 0812345678     -> 243812345678
- * +243812345678  -> 243812345678
- * 243812345678   -> 243812345678
- */
-export function normalizeWhatsAppPhone(phone: string): string {
-  const normalized = phone.replace(/\D/g, "");
+// ============================================================
+// NORMALISER LE NUMÉRO DRC
+// ============================================================
 
-  // Format local RDC : 0XXXXXXXXX
-  if (/^0\d{9}$/.test(normalized)) {
-    return `243${normalized.slice(1)}`;
+export function normalizeWhatsAppPhone(phone: string): string {
+  const cleanPhone = phone.replace(/\D/g, "");
+
+  // Exemple :
+  // 0812345678 -> 243812345678
+  if (cleanPhone.length === 10 && cleanPhone.startsWith("0")) {
+    return `243${cleanPhone.substring(1)}`;
   }
 
-  // Format international RDC : 243XXXXXXXXX
-  if (/^243\d{9}$/.test(normalized)) {
-    return normalized;
+  // Déjà au format international
+  if (cleanPhone.length === 12 && cleanPhone.startsWith("243")) {
+    return cleanPhone;
   }
 
   throw new Error("INVALID_WHATSAPP_PHONE");
 }
 
-/**
- * Ouvre une conversation WhatsApp avec le numéro fourni.
- *
- * Le client n'a pas besoin d'être enregistré dans les contacts.
- * Le message, s'il est fourni, est prérempli, mais n'est pas envoyé
- * automatiquement.
- */
+// ============================================================
+// OUVRIR WHATSAPP SUR LE CLIENT
+// ============================================================
+
 export async function openWhatsAppChat(
   phone: string,
   message?: string,
 ): Promise<void> {
-  const whatsappPhone = normalizeWhatsAppPhone(phone);
+  const normalizedPhone = normalizeWhatsAppPhone(phone);
 
-  const baseUrl = `https://wa.me/${whatsappPhone}`;
+  const encodedMessage = message ? `?text=${encodeURIComponent(message)}` : "";
 
-  const url = message?.trim()
-    ? `${baseUrl}?text=${encodeURIComponent(message.trim())}`
-    : baseUrl;
+  const url = `https://wa.me/${normalizedPhone}` + encodedMessage;
+
+  const supported = await Linking.canOpenURL(url);
+
+  if (!supported) {
+    throw new Error("WHATSAPP_UNAVAILABLE");
+  }
 
   await Linking.openURL(url);
 }

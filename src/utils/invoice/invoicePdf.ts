@@ -1,7 +1,6 @@
 import * as Print from "expo-print";
 
 import type { InvoiceDocumentData } from "./invoice";
-
 import { buildInvoiceHtml } from "./invoiceHtml";
 
 // ============================================================
@@ -42,8 +41,15 @@ export async function generateInvoicePdf(
 /**
  * Ouvre la fenêtre native d'impression.
  *
- * L'annulation par l'utilisateur est volontairement
- * considérée comme une action normale.
+ * IMPORTANT :
+ * L'utilisateur peut fermer ou annuler la fenêtre
+ * d'impression. Ce n'est PAS une erreur applicative.
+ *
+ * Dans ce cas, on retourne simplement :
+ *
+ * {
+ *   status: "cancelled"
+ * }
  */
 export async function printInvoice(invoice: InvoiceDocumentData): Promise<{
   status: "printed" | "cancelled";
@@ -59,11 +65,19 @@ export async function printInvoice(invoice: InvoiceDocumentData): Promise<{
       status: "printed",
     };
   } catch (error) {
+    // --------------------------------------------------------
+    // L'utilisateur a annulé/fermé l'impression
+    // --------------------------------------------------------
+
     if (isUserCancellation(error)) {
       return {
         status: "cancelled",
       };
     }
+
+    // --------------------------------------------------------
+    // Une vraie erreur d'impression
+    // --------------------------------------------------------
 
     throw error;
   }
@@ -86,6 +100,8 @@ function isUserCancellation(error: unknown): boolean {
     normalized.includes("cancel") ||
     normalized.includes("cancelled") ||
     normalized.includes("canceled") ||
-    normalized.includes("dismiss")
+    normalized.includes("dismiss") ||
+    normalized.includes("user cancelled") ||
+    normalized.includes("user canceled")
   );
 }
