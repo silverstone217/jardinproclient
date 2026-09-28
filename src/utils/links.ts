@@ -162,7 +162,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
 
   {
     label: "Clients",
-    value: "/settings/customers",
+    value: "/settings/customer",
     description: "Gérer les clients et consulter leur historique",
     icon: "users",
     section: "customers",
