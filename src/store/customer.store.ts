@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import { create } from "zustand";
 
 import { api } from "@/utils/api";
@@ -7,78 +6,109 @@ import { api } from "@/utils/api";
 import type {
   Customer,
   CustomerDetail,
+  CustomerInvoice,
+  CustomerListItem,
+  CustomerLoyaltyTransaction,
   CustomerPagination,
   CustomerPointOfSale,
+  CustomerPointOfSaleContext,
+  CustomerStatistics,
+  CustomerSync,
 } from "@/types/customer";
 
-const CUSTOMER_STORAGE_KEY = "jardin-customer-storage";
+// ======================================================
+// CONSTANTS
+// ======================================================
 
+const CUSTOMER_STORAGE_KEY = "jardin-customer-storage";
 const CUSTOMER_DETAIL_STORAGE_KEY = "jardin-customer-detail-storage";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 
+const ALL_POINT_OF_SALES_KEY = "ALL";
+
+// ======================================================
+// CACHE TYPES
+// ======================================================
+
 interface CustomerCache {
-  customers: Customer[];
-  pagination: CustomerPagination | null;
+  customers: CustomerListItem[];
+  pagination: CustomerPagination;
   search: string;
+  pointOfSale: CustomerPointOfSaleContext;
+  sync: CustomerSync | null;
   updatedAt: string;
 }
 
 interface CustomerDetailCache {
   customer: CustomerDetail;
+  pagination: CustomerPagination;
+  pointOfSale: CustomerPointOfSaleContext;
+  sync: CustomerSync | null;
   updatedAt: string;
 }
 
-interface CustomerStoreState {
-  // ============================================================
-  // LISTE
-  // ============================================================
+// ======================================================
+// STORE TYPES
+// ======================================================
 
-  customers: Customer[];
+interface CustomerStore {
+  // ----------------------------------------------------
+  // LIST STATE
+  // ----------------------------------------------------
 
+  customers: CustomerListItem[];
   pagination: CustomerPagination | null;
-
   search: string;
 
-  selectedPointOfSale: CustomerPointOfSale | null;
+  // ----------------------------------------------------
+  // POS CONTEXT
+  // ----------------------------------------------------
 
+  selectedPointOfSale: CustomerPointOfSale | null;
+  isAllPointOfSales: boolean;
   availablePointOfSales: CustomerPointOfSale[];
 
-  // ============================================================
-  // DÉTAIL
-  // ============================================================
+  // ----------------------------------------------------
+  // DETAIL STATE
+  // ----------------------------------------------------
 
   selectedCustomer: CustomerDetail | null;
-
   detailPagination: CustomerPagination | null;
 
-  // ============================================================
-  // ÉTATS
-  // ============================================================
+  // ----------------------------------------------------
+  // SYNC / STATUS
+  // ----------------------------------------------------
+
+  sync: CustomerSync | null;
 
   isLoading: boolean;
   isRefreshing: boolean;
-  isLoadingDetails: boolean;
   isLoadingMore: boolean;
+  isLoadingDetail: boolean;
+  isRefreshingDetail: boolean;
+
   isOffline: boolean;
 
   error: string | null;
   detailError: string | null;
 
-  // ============================================================
+  // ----------------------------------------------------
   // POS
-  // ============================================================
+  // ----------------------------------------------------
 
   setAvailablePointOfSales: (pointOfSales: CustomerPointOfSale[]) => void;
 
-  selectPointOfSale: (pointOfSale: CustomerPointOfSale) => Promise<void>;
+  selectPointOfSale: (pointOfSale: CustomerPointOfSale | null) => Promise<void>;
+
+  selectAllPointOfSales: () => Promise<void>;
 
   clearSelectedPointOfSale: () => void;
 
-  // ============================================================
-  // LISTE CLIENTS
-  // ============================================================
+  // ----------------------------------------------------
+  // CUSTOMER LIST
+  // ----------------------------------------------------
 
   fetchCustomers: (pointOfSaleId?: string, search?: string) => Promise<void>;
 
@@ -88,22 +118,22 @@ interface CustomerStoreState {
 
   loadMoreCustomers: () => Promise<void>;
 
-  // ============================================================
-  // DÉTAIL CLIENT
-  // ============================================================
+  // ----------------------------------------------------
+  // CUSTOMER DETAIL
+  // ----------------------------------------------------
 
   getCustomer: (
     clientId: string,
     pointOfSaleId?: string,
   ) => Promise<CustomerDetail | null>;
 
-  refreshCustomer: (clientId: string, pointOfSaleId?: string) => Promise<void>;
+  refreshCustomer: () => Promise<void>;
 
-  // ============================================================
-  // UTILITAIRES
-  // ============================================================
+  // ----------------------------------------------------
+  // UTILITIES
+  // ----------------------------------------------------
 
-  setSearch: (search: string) => void;
+  clearCustomers: () => void;
 
   clearSelectedCustomer: () => void;
 
@@ -111,31 +141,19 @@ interface CustomerStoreState {
 
   clearDetailError: () => void;
 
-  reset: () => Promise<void>;
+  reset: () => void;
 }
 
-// ================================================================
+// ======================================================
 // HELPERS
-// ================================================================
+// ======================================================
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (axios.isAxiosError(error)) {
-    return error.response?.data?.message ?? error.message ?? fallback;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return fallback;
+const getScopeKey = (pointOfSaleId?: string | null): string => {
+  return pointOfSaleId?.trim() || ALL_POINT_OF_SALES_KEY;
 };
 
-// ================================================================
-// CACHE LISTE
-// ================================================================
-
-const getCustomerCacheKey = (pointOfSaleId: string): string => {
-  return `${CUSTOMER_STORAGE_KEY}:${pointOfSaleId}`;
+const getCustomerCacheKey = (pointOfSaleId: string, search: string): string => {
+  return `${CUSTOMER_STORAGE_KEY}:${pointOfSaleId}:${search.trim()}`;
 };
 
 const getCustomerDetailCacheKey = (
@@ -145,215 +163,214 @@ const getCustomerDetailCacheKey = (
   return `${CUSTOMER_DETAIL_STORAGE_KEY}:${pointOfSaleId}:${clientId}`;
 };
 
-const readCustomerCache = async (
-  pointOfSaleId: string,
-): Promise<CustomerCache | null> => {
-  try {
-    const key = getCustomerCacheKey(pointOfSaleId);
+const createDefaultPagination = (
+  page = DEFAULT_PAGE,
+  limit = DEFAULT_LIMIT,
+): CustomerPagination => ({
+  page,
+  limit,
+  total: 0,
+  totalPages: 0,
+  hasNextPage: false,
+  hasPreviousPage: false,
+});
 
-    const stored = await AsyncStorage.getItem(key);
+const createDefaultPointOfSaleContext = (
+  isAll = false,
+): CustomerPointOfSaleContext => ({
+  id: null,
+  isAll,
+});
 
-    if (!stored) {
-      return null;
-    }
+// ======================================================
+// DETAIL COMPOSER
+// ======================================================
 
-    return JSON.parse(stored) as CustomerCache;
-  } catch (error) {
-    console.error("Erreur lecture cache clients :", error);
+const buildCustomerDetail = (
+  customer: Customer,
+  statistics?: CustomerStatistics,
+  invoices?: CustomerInvoice[],
+  loyaltyTransactions?: CustomerLoyaltyTransaction[],
+): CustomerDetail => {
+  return {
+    ...customer,
 
-    return null;
-  }
+    statistics: statistics ?? {
+      totalSpent: "0",
+      purchaseCount: 0,
+      averagePurchaseAmount: "0",
+      totalPointsEarned: 0,
+      totalPointsUsed: 0,
+      lastPurchaseAt: null,
+    },
+
+    invoices: invoices ?? [],
+
+    loyaltyTransactions: loyaltyTransactions ?? [],
+  };
 };
 
-const saveCustomerCache = async (
-  pointOfSaleId: string,
-  cache: CustomerCache,
-): Promise<void> => {
-  try {
-    const key = getCustomerCacheKey(pointOfSaleId);
-
-    await AsyncStorage.setItem(key, JSON.stringify(cache));
-  } catch (error) {
-    console.error("Erreur sauvegarde cache clients :", error);
-  }
-};
-
-// ================================================================
-// CACHE DÉTAIL
-// ================================================================
-
-const readCustomerDetailCache = async (
-  pointOfSaleId: string,
-  clientId: string,
-): Promise<CustomerDetailCache | null> => {
-  try {
-    const key = getCustomerDetailCacheKey(pointOfSaleId, clientId);
-
-    const stored = await AsyncStorage.getItem(key);
-
-    if (!stored) {
-      return null;
-    }
-
-    return JSON.parse(stored) as CustomerDetailCache;
-  } catch (error) {
-    console.error("Erreur lecture cache détail client :", error);
-
-    return null;
-  }
-};
-
-const saveCustomerDetailCache = async (
-  pointOfSaleId: string,
-  clientId: string,
-  cache: CustomerDetailCache,
-): Promise<void> => {
-  try {
-    const key = getCustomerDetailCacheKey(pointOfSaleId, clientId);
-
-    await AsyncStorage.setItem(key, JSON.stringify(cache));
-  } catch (error) {
-    console.error("Erreur sauvegarde cache détail client :", error);
-  }
-};
-
-// ================================================================
+// ======================================================
 // STORE
-// ================================================================
+// ======================================================
 
-export const useCustomerStore = create<CustomerStoreState>((set, get) => ({
-  // ==========================================================
+export const useCustomerStore = create<CustomerStore>((set, get) => ({
+  // ====================================================
   // INITIAL STATE
-  // ==========================================================
+  // ====================================================
 
   customers: [],
-
   pagination: null,
-
   search: "",
 
   selectedPointOfSale: null,
-
+  isAllPointOfSales: false,
   availablePointOfSales: [],
 
   selectedCustomer: null,
-
   detailPagination: null,
 
+  sync: null,
+
   isLoading: false,
-
   isRefreshing: false,
-
-  isLoadingDetails: false,
-
   isLoadingMore: false,
+  isLoadingDetail: false,
+  isRefreshingDetail: false,
 
   isOffline: false,
 
   error: null,
-
   detailError: null,
 
-  // ==========================================================
+  // ====================================================
   // POS
-  // ==========================================================
+  // ====================================================
 
   setAvailablePointOfSales: (pointOfSales) => {
     const activePointOfSales = pointOfSales.filter(
       (pointOfSale) => pointOfSale.isActive,
     );
 
-    set({
-      availablePointOfSales: activePointOfSales,
-    });
-
-    // --------------------------------------------------------
-    // Ne pas écraser un POS déjà sélectionné.
-    // --------------------------------------------------------
-
-    const current = get().selectedPointOfSale;
+    const currentPointOfSale = get().selectedPointOfSale;
 
     if (
-      current &&
-      activePointOfSales.some((pointOfSale) => pointOfSale.id === current.id)
+      currentPointOfSale &&
+      activePointOfSales.some(
+        (pointOfSale) => pointOfSale.id === currentPointOfSale.id,
+      )
     ) {
-      return;
-    }
-
-    // --------------------------------------------------------
-    // POS par défaut :
-    //
-    // 1. POS principal
-    // 2. Sinon premier POS actif
-    // --------------------------------------------------------
-
-    const defaultPointOfSale =
-      activePointOfSales.find((pointOfSale) => pointOfSale.isMainStore) ??
-      activePointOfSales[0] ??
-      null;
-
-    set({
-      selectedPointOfSale: defaultPointOfSale,
-    });
-  },
-
-  selectPointOfSale: async (pointOfSale) => {
-    set({
-      selectedPointOfSale: pointOfSale,
-
-      customers: [],
-
-      pagination: null,
-
-      selectedCustomer: null,
-
-      detailPagination: null,
-
-      error: null,
-
-      detailError: null,
-
-      isOffline: false,
-    });
-
-    await get().fetchCustomers(pointOfSale.id, get().search);
-  },
-
-  clearSelectedPointOfSale: () => {
-    set({
-      selectedPointOfSale: null,
-
-      customers: [],
-
-      pagination: null,
-
-      selectedCustomer: null,
-
-      detailPagination: null,
-    });
-  },
-
-  // ==========================================================
-  // FETCH CUSTOMERS
-  // ==========================================================
-
-  fetchCustomers: async (pointOfSaleId, search) => {
-    const currentPOS = get().selectedPointOfSale;
-
-    const resolvedPointOfSaleId = pointOfSaleId ?? currentPOS?.id;
-
-    if (!resolvedPointOfSaleId) {
       set({
-        error: "Aucun point de vente sélectionné.",
-        customers: [],
-        pagination: null,
+        availablePointOfSales: activePointOfSales,
       });
 
       return;
     }
 
-    const resolvedSearch =
-      search !== undefined ? search.trim() : get().search.trim();
+    set({
+      availablePointOfSales: activePointOfSales,
+    });
+  },
+
+  // ----------------------------------------------------
+  // SELECT POS
+  // ----------------------------------------------------
+
+  selectPointOfSale: async (pointOfSale) => {
+    if (!pointOfSale) {
+      await get().selectAllPointOfSales();
+      return;
+    }
+
+    if (!pointOfSale.isActive) {
+      set({
+        error: "Ce point de vente est inactif.",
+      });
+
+      return;
+    }
+
+    set({
+      selectedPointOfSale: pointOfSale,
+      isAllPointOfSales: false,
+
+      customers: [],
+      pagination: null,
+      search: "",
+
+      selectedCustomer: null,
+      detailPagination: null,
+
+      sync: null,
+
+      error: null,
+      detailError: null,
+    });
+
+    await get().fetchCustomers(pointOfSale.id);
+  },
+
+  // ----------------------------------------------------
+  // SELECT ALL POS
+  // ----------------------------------------------------
+
+  selectAllPointOfSales: async () => {
+    set({
+      selectedPointOfSale: null,
+      isAllPointOfSales: true,
+
+      customers: [],
+      pagination: null,
+      search: "",
+
+      selectedCustomer: null,
+      detailPagination: null,
+
+      sync: null,
+
+      error: null,
+      detailError: null,
+    });
+
+    await get().fetchCustomers();
+  },
+
+  // ----------------------------------------------------
+  // CLEAR POS
+  // ----------------------------------------------------
+
+  clearSelectedPointOfSale: () => {
+    set({
+      selectedPointOfSale: null,
+      isAllPointOfSales: false,
+
+      customers: [],
+      pagination: null,
+      search: "",
+
+      selectedCustomer: null,
+      detailPagination: null,
+
+      sync: null,
+
+      error: null,
+      detailError: null,
+    });
+  },
+
+  // ====================================================
+  // CUSTOMER LIST
+  // ====================================================
+
+  fetchCustomers: async (pointOfSaleId, search) => {
+    const state = get();
+
+    const resolvedSearch = search ?? state.search;
+
+    const resolvedPointOfSaleId =
+      pointOfSaleId ?? state.selectedPointOfSale?.id ?? undefined;
+
+    const scopeKey = getScopeKey(resolvedPointOfSaleId);
 
     set({
       isLoading: true,
@@ -362,116 +379,181 @@ export const useCustomerStore = create<CustomerStoreState>((set, get) => ({
       search: resolvedSearch,
     });
 
-    // --------------------------------------------------------
-    // CACHE
-    // --------------------------------------------------------
-
-    const cached = await readCustomerCache(resolvedPointOfSaleId);
-
-    if (cached) {
-      set({
-        customers: cached.customers,
-
-        pagination: cached.pagination,
-
-        search: cached.search,
-
-        isLoading: false,
-      });
-    }
-
-    // --------------------------------------------------------
-    // SERVER
-    // --------------------------------------------------------
-
     try {
+      // ------------------------------------------------
+      // CACHE
+      // ------------------------------------------------
+
+      const cacheKey = getCustomerCacheKey(scopeKey, resolvedSearch);
+
+      const cachedData = await AsyncStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        try {
+          const cache: CustomerCache = JSON.parse(cachedData);
+
+          set({
+            customers: cache.customers,
+            pagination: cache.pagination,
+            sync: cache.sync,
+            isOffline: false,
+          });
+        } catch {
+          // Ignore corrupted cache.
+        }
+      }
+
+      // ------------------------------------------------
+      // REQUEST
+      // ------------------------------------------------
+
+      const params: Record<string, string | number> = {
+        page: DEFAULT_PAGE,
+        limit: DEFAULT_LIMIT,
+      };
+
+      if (resolvedSearch.trim()) {
+        params.search = resolvedSearch.trim();
+      }
+
+      if (resolvedPointOfSaleId) {
+        params.pointOfSaleId = resolvedPointOfSaleId;
+      }
+
       const response = await api.get("/customer", {
-        params: {
-          pointOfSaleId: resolvedPointOfSaleId,
-
-          search: resolvedSearch || undefined,
-
-          page: DEFAULT_PAGE,
-
-          limit: DEFAULT_LIMIT,
-        },
+        params,
       });
 
       const data = response.data;
 
-      const customers = (data?.customers ?? []) as Customer[];
+      // ------------------------------------------------
+      // API ERROR
+      // ------------------------------------------------
 
-      const pagination = (data?.pagination ??
-        null) as CustomerPagination | null;
+      if (!data?.success) {
+        throw new Error(
+          data?.message || "Impossible de récupérer les clients.",
+        );
+      }
 
-      await saveCustomerCache(resolvedPointOfSaleId, {
+      // ------------------------------------------------
+      // RESPONSE
+      // ------------------------------------------------
+
+      const customers: CustomerListItem[] = data.customers ?? [];
+
+      const pagination: CustomerPagination =
+        data.pagination ?? createDefaultPagination();
+
+      const pointOfSale: CustomerPointOfSaleContext =
+        data.pointOfSale ??
+        createDefaultPointOfSaleContext(!resolvedPointOfSaleId);
+
+      const sync: CustomerSync | null = data.sync ?? null;
+
+      // ------------------------------------------------
+      // SAVE CACHE
+      // ------------------------------------------------
+
+      const cache: CustomerCache = {
         customers,
         pagination,
         search: resolvedSearch,
+        pointOfSale,
+        sync,
         updatedAt: new Date().toISOString(),
-      });
+      };
+
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(cache));
+
+      // ------------------------------------------------
+      // UPDATE STATE
+      // ------------------------------------------------
 
       set({
         customers,
-
         pagination,
-
         search: resolvedSearch,
-
-        isLoading: false,
+        sync,
 
         isOffline: false,
-
         error: null,
+
+        // The API is authoritative about the scope.
+        isAllPointOfSales: pointOfSale.isAll,
       });
-    } catch (error) {
-      console.error("Erreur récupération clients :", error);
 
-      // ------------------------------------------------------
-      // Si cache disponible :
-      // on reste fonctionnel offline.
-      // ------------------------------------------------------
+      if (!pointOfSale.isAll && pointOfSale.id) {
+        const currentPointOfSale = get().availablePointOfSales.find(
+          (item) => item.id === pointOfSale.id,
+        );
 
-      if (cached) {
+        if (currentPointOfSale) {
+          set({
+            selectedPointOfSale: currentPointOfSale,
+          });
+        }
+      } else {
         set({
-          customers: cached.customers,
-
-          pagination: cached.pagination,
-
-          search: cached.search,
-
-          isLoading: false,
-
-          isOffline: true,
-
-          error: null,
+          selectedPointOfSale: null,
         });
+      }
+    } catch (error: any) {
+      // ------------------------------------------------
+      // OFFLINE FALLBACK
+      // ------------------------------------------------
 
-        return;
+      const cacheKey = getCustomerCacheKey(scopeKey, resolvedSearch);
+
+      const cachedData = await AsyncStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        try {
+          const cache: CustomerCache = JSON.parse(cachedData);
+
+          set({
+            customers: cache.customers,
+            pagination: cache.pagination,
+            search: cache.search,
+            sync: cache.sync,
+
+            isOffline: true,
+            error: null,
+
+            isAllPointOfSales: cache.pointOfSale.isAll,
+            selectedPointOfSale: cache.pointOfSale.isAll
+              ? null
+              : (get().availablePointOfSales.find(
+                  (pointOfSale) => pointOfSale.id === cache.pointOfSale.id,
+                ) ?? null),
+          });
+
+          return;
+        } catch {
+          // Ignore corrupted cache.
+        }
       }
 
       set({
-        isLoading: false,
-
         isOffline: true,
-
-        error: getErrorMessage(error, "Impossible de récupérer les clients."),
+        error:
+          error?.response?.data?.message ??
+          error?.message ??
+          "Impossible de récupérer les clients.",
+      });
+    } finally {
+      set({
+        isLoading: false,
       });
     }
   },
 
-  // ==========================================================
-  // REFRESH
-  // ==========================================================
+  // ====================================================
+  // REFRESH CUSTOMERS
+  // ====================================================
 
   refreshCustomers: async () => {
-    const pointOfSaleId = get().selectedPointOfSale?.id;
-
-    if (!pointOfSaleId) {
-      return;
-    }
-
-    const search = get().search.trim();
+    const state = get();
 
     set({
       isRefreshing: true,
@@ -479,356 +561,326 @@ export const useCustomerStore = create<CustomerStoreState>((set, get) => ({
     });
 
     try {
-      const response = await api.get("/customer", {
-        params: {
-          pointOfSaleId,
-
-          search: search || undefined,
-
-          page: DEFAULT_PAGE,
-
-          limit: DEFAULT_LIMIT,
-        },
-      });
-
-      const data = response.data;
-
-      const customers = (data?.customers ?? []) as Customer[];
-
-      const pagination = (data?.pagination ??
-        null) as CustomerPagination | null;
-
-      await saveCustomerCache(pointOfSaleId, {
-        customers,
-        pagination,
-        search,
-        updatedAt: new Date().toISOString(),
-      });
-
-      set({
-        customers,
-
-        pagination,
-
-        isRefreshing: false,
-
-        isOffline: false,
-
-        error: null,
-      });
-    } catch (error) {
-      console.error("Erreur actualisation clients :", error);
-
+      await get().fetchCustomers(
+        state.isAllPointOfSales ? undefined : state.selectedPointOfSale?.id,
+        state.search,
+      );
+    } finally {
       set({
         isRefreshing: false,
-
-        isOffline: true,
-
-        error: getErrorMessage(error, "Impossible d'actualiser les clients."),
       });
     }
   },
 
-  // ==========================================================
-  // SEARCH
-  // ==========================================================
+  // ====================================================
+  // SEARCH CUSTOMERS
+  // ====================================================
 
   searchCustomers: async (search) => {
-    const cleanSearch = search.trim();
+    const state = get();
 
     set({
-      search: cleanSearch,
+      search,
     });
 
-    const pointOfSaleId = get().selectedPointOfSale?.id;
-
-    if (!pointOfSaleId) {
-      return;
-    }
-
-    await get().fetchCustomers(pointOfSaleId, cleanSearch);
+    await get().fetchCustomers(
+      state.isAllPointOfSales ? undefined : state.selectedPointOfSale?.id,
+      search,
+    );
   },
 
-  // ==========================================================
+  // ====================================================
   // LOAD MORE CUSTOMERS
-  // ==========================================================
+  // ====================================================
 
   loadMoreCustomers: async () => {
-    const pointOfSaleId = get().selectedPointOfSale?.id;
+    const state = get();
 
-    const pagination = get().pagination;
-
-    if (
-      !pointOfSaleId ||
-      !pagination ||
-      !pagination.hasNextPage ||
-      get().isLoadingMore
-    ) {
+    if (state.isLoadingMore || !state.pagination?.hasNextPage) {
       return;
     }
+
+    const nextPage = state.pagination.page + 1;
+
+    const resolvedPointOfSaleId = state.isAllPointOfSales
+      ? undefined
+      : state.selectedPointOfSale?.id;
 
     set({
       isLoadingMore: true,
+      error: null,
     });
 
     try {
-      const nextPage = pagination.page + 1;
+      const params: Record<string, string | number> = {
+        page: nextPage,
+        limit: state.pagination.limit,
+      };
+
+      if (state.search.trim()) {
+        params.search = state.search.trim();
+      }
+
+      if (resolvedPointOfSaleId) {
+        params.pointOfSaleId = resolvedPointOfSaleId;
+      }
 
       const response = await api.get("/customer", {
-        params: {
-          pointOfSaleId,
-
-          search: get().search.trim() || undefined,
-
-          page: nextPage,
-
-          limit: pagination.limit || DEFAULT_LIMIT,
-        },
+        params,
       });
 
       const data = response.data;
 
-      const newCustomers = (data?.customers ?? []) as Customer[];
+      if (!data?.success) {
+        throw new Error(
+          data?.message || "Impossible de charger les clients suivants.",
+        );
+      }
 
-      const newPagination = (data?.pagination ??
-        null) as CustomerPagination | null;
+      const newCustomers: CustomerListItem[] = data.customers ?? [];
 
-      const customers = [...get().customers, ...newCustomers];
-
-      await saveCustomerCache(pointOfSaleId, {
-        customers,
-
-        pagination: newPagination ?? pagination,
-
-        search: get().search,
-
-        updatedAt: new Date().toISOString(),
-      });
+      const pagination: CustomerPagination =
+        data.pagination ??
+        createDefaultPagination(nextPage, state.pagination.limit);
 
       set({
-        customers,
+        customers: [...state.customers, ...newCustomers],
+        pagination,
 
-        pagination: newPagination ?? pagination,
-
-        isLoadingMore: false,
+        sync: data.sync ?? state.sync,
 
         isOffline: false,
+        error: null,
       });
-    } catch (error) {
-      console.error("Erreur chargement clients supplémentaires :", error);
-
+    } catch (error: any) {
+      set({
+        error:
+          error?.response?.data?.message ??
+          error?.message ??
+          "Impossible de charger les clients suivants.",
+      });
+    } finally {
       set({
         isLoadingMore: false,
-
-        isOffline: true,
       });
     }
   },
 
-  // ==========================================================
-  // GET CUSTOMER DETAIL
-  // ==========================================================
+  // ====================================================
+  // CUSTOMER DETAIL
+  // ====================================================
 
   getCustomer: async (clientId, pointOfSaleId) => {
+    const state = get();
+
     const resolvedPointOfSaleId =
-      pointOfSaleId ?? get().selectedPointOfSale?.id;
+      pointOfSaleId ??
+      (state.isAllPointOfSales ? undefined : state.selectedPointOfSale?.id);
 
-    if (!resolvedPointOfSaleId) {
-      set({
-        detailError: "Aucun point de vente sélectionné.",
-      });
-
-      return null;
-    }
+    const scopeKey = getScopeKey(resolvedPointOfSaleId);
 
     set({
-      isLoadingDetails: true,
-
+      isLoadingDetail: true,
       detailError: null,
-
       isOffline: false,
     });
 
-    // --------------------------------------------------------
-    // CACHE
-    // --------------------------------------------------------
-
-    const cached = await readCustomerDetailCache(
-      resolvedPointOfSaleId,
-      clientId,
-    );
-
-    if (cached) {
-      set({
-        selectedCustomer: cached.customer,
-
-        isLoadingDetails: false,
-      });
-    }
-
-    // --------------------------------------------------------
-    // SERVER
-    // --------------------------------------------------------
-
     try {
+      // ------------------------------------------------
+      // CACHE
+      // ------------------------------------------------
+
+      const cacheKey = getCustomerDetailCacheKey(scopeKey, clientId);
+
+      const cachedData = await AsyncStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        try {
+          const cache: CustomerDetailCache = JSON.parse(cachedData);
+
+          set({
+            selectedCustomer: cache.customer,
+            detailPagination: cache.pagination,
+            sync: cache.sync,
+          });
+        } catch {
+          // Ignore corrupted cache.
+        }
+      }
+
+      // ------------------------------------------------
+      // REQUEST
+      // ------------------------------------------------
+
+      const params: Record<string, string | number> = {};
+
+      if (resolvedPointOfSaleId) {
+        params.pointOfSaleId = resolvedPointOfSaleId;
+      }
+
       const response = await api.get(`/customer/${clientId}`, {
-        params: {
-          pointOfSaleId: resolvedPointOfSaleId,
-        },
+        params,
       });
 
       const data = response.data;
 
-      const customer = data?.customer as CustomerDetail | undefined;
-
-      if (!customer) {
-        throw new Error("Les informations du client sont introuvables.");
+      if (!data?.success || !data.customer) {
+        throw new Error(data?.message || "Client introuvable ou inaccessible.");
       }
 
-      await saveCustomerDetailCache(resolvedPointOfSaleId, clientId, {
-        customer,
+      // ------------------------------------------------
+      // COMPOSE DETAIL
+      // ------------------------------------------------
 
+      const customer: CustomerDetail = buildCustomerDetail(
+        data.customer as Customer,
+        data.statistics as CustomerStatistics | undefined,
+        data.invoices as CustomerInvoice[] | undefined,
+        data.loyaltyTransactions as CustomerLoyaltyTransaction[] | undefined,
+      );
+
+      const pagination: CustomerPagination =
+        data.pagination ?? createDefaultPagination();
+
+      const pointOfSale: CustomerPointOfSaleContext =
+        data.pointOfSale ??
+        createDefaultPointOfSaleContext(!resolvedPointOfSaleId);
+
+      const sync: CustomerSync | null = data.sync ?? null;
+
+      // ------------------------------------------------
+      // SAVE CACHE
+      // ------------------------------------------------
+
+      const cache: CustomerDetailCache = {
+        customer,
+        pagination,
+        pointOfSale,
+        sync,
         updatedAt: new Date().toISOString(),
-      });
+      };
+
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(cache));
+
+      // ------------------------------------------------
+      // UPDATE STATE
+      // ------------------------------------------------
 
       set({
         selectedCustomer: customer,
+        detailPagination: pagination,
+        sync,
 
-        detailPagination: data?.pagination ?? null,
-
-        isLoadingDetails: false,
-
+        isAllPointOfSales: pointOfSale.isAll,
         isOffline: false,
-
         detailError: null,
       });
 
       return customer;
-    } catch (error) {
-      console.error("Erreur récupération détail client :", error);
+    } catch (error: any) {
+      // ------------------------------------------------
+      // OFFLINE FALLBACK
+      // ------------------------------------------------
 
-      if (cached) {
-        set({
-          selectedCustomer: cached.customer,
+      const cacheKey = getCustomerDetailCacheKey(scopeKey, clientId);
 
-          isLoadingDetails: false,
+      const cachedData = await AsyncStorage.getItem(cacheKey);
 
-          isOffline: true,
+      if (cachedData) {
+        try {
+          const cache: CustomerDetailCache = JSON.parse(cachedData);
 
-          detailError: null,
-        });
+          set({
+            selectedCustomer: cache.customer,
+            detailPagination: cache.pagination,
+            sync: cache.sync,
 
-        return cached.customer;
+            isOffline: true,
+            detailError: null,
+
+            isAllPointOfSales: cache.pointOfSale.isAll,
+          });
+
+          return cache.customer;
+        } catch {
+          // Ignore corrupted cache.
+        }
       }
 
       set({
-        isLoadingDetails: false,
-
         isOffline: true,
-
-        detailError: getErrorMessage(
-          error,
-          "Impossible de récupérer les informations du client.",
-        ),
+        detailError:
+          error?.response?.data?.message ??
+          error?.message ??
+          "Impossible de récupérer le client.",
       });
 
       return null;
+    } finally {
+      set({
+        isLoadingDetail: false,
+      });
     }
   },
 
-  // ==========================================================
-  // REFRESH DETAIL
-  // ==========================================================
+  // ====================================================
+  // REFRESH CUSTOMER DETAIL
+  // ====================================================
 
-  refreshCustomer: async (clientId, pointOfSaleId) => {
-    const resolvedPointOfSaleId =
-      pointOfSaleId ?? get().selectedPointOfSale?.id;
+  refreshCustomer: async () => {
+    const state = get();
 
-    if (!resolvedPointOfSaleId) {
+    if (!state.selectedCustomer) {
       return;
     }
 
     set({
-      isLoadingDetails: true,
-
+      isRefreshingDetail: true,
       detailError: null,
     });
 
     try {
-      const response = await api.get(`/customer/${clientId}`, {
-        params: {
-          pointOfSaleId: resolvedPointOfSaleId,
-        },
-      });
-
-      const data = response.data;
-
-      const customer = data?.customer as CustomerDetail | undefined;
-
-      if (!customer) {
-        throw new Error("Les informations du client sont introuvables.");
-      }
-
-      await saveCustomerDetailCache(resolvedPointOfSaleId, clientId, {
-        customer,
-
-        updatedAt: new Date().toISOString(),
-      });
-
+      await get().getCustomer(
+        state.selectedCustomer.id,
+        state.isAllPointOfSales ? undefined : state.selectedPointOfSale?.id,
+      );
+    } finally {
       set({
-        selectedCustomer: customer,
-
-        detailPagination: data?.pagination ?? null,
-
-        isLoadingDetails: false,
-
-        isOffline: false,
-
-        detailError: null,
-      });
-    } catch (error) {
-      console.error("Erreur actualisation détail client :", error);
-
-      set({
-        isLoadingDetails: false,
-
-        isOffline: true,
-
-        detailError: getErrorMessage(
-          error,
-          "Impossible d'actualiser les informations du client.",
-        ),
+        isRefreshingDetail: false,
       });
     }
   },
 
-  // ==========================================================
-  // SEARCH STATE
-  // ==========================================================
+  // ====================================================
+  // CLEAR CUSTOMERS
+  // ====================================================
 
-  setSearch: (search) => {
+  clearCustomers: () => {
     set({
-      search,
+      customers: [],
+      pagination: null,
+      search: "",
+      sync: null,
+      error: null,
+      isOffline: false,
     });
   },
 
-  // ==========================================================
-  // CLEAR DETAIL
-  // ==========================================================
+  // ====================================================
+  // CLEAR SELECTED CUSTOMER
+  // ====================================================
 
   clearSelectedCustomer: () => {
     set({
       selectedCustomer: null,
-
       detailPagination: null,
-
       detailError: null,
     });
   },
 
-  // ==========================================================
-  // ERRORS
-  // ==========================================================
+  // ====================================================
+  // CLEAR ERROR
+  // ====================================================
 
   clearError: () => {
     set({
@@ -836,32 +888,41 @@ export const useCustomerStore = create<CustomerStoreState>((set, get) => ({
     });
   },
 
+  // ====================================================
+  // CLEAR DETAIL ERROR
+  // ====================================================
+
   clearDetailError: () => {
     set({
       detailError: null,
     });
   },
 
-  // ==========================================================
+  // ====================================================
   // RESET
-  // ==========================================================
+  // ====================================================
 
-  reset: async () => {
+  reset: () => {
     set({
       customers: [],
-
       pagination: null,
       search: "",
 
       selectedPointOfSale: null,
+      isAllPointOfSales: false,
       availablePointOfSales: [],
+
       selectedCustomer: null,
       detailPagination: null,
 
+      sync: null,
+
       isLoading: false,
       isRefreshing: false,
-      isLoadingDetails: false,
       isLoadingMore: false,
+      isLoadingDetail: false,
+      isRefreshingDetail: false,
+
       isOffline: false,
 
       error: null,

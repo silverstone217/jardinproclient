@@ -1,5 +1,7 @@
 import { useFocusEffect } from "expo-router";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import {
   Pressable,
   RefreshControl,
@@ -8,7 +10,10 @@ import {
   Text,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { Ionicons } from "@expo/vector-icons";
 
 import { CustomerCard } from "@/components/customer/CustomerCard";
 import { CustomerEmpty } from "@/components/customer/CustomerEmpty";
@@ -23,8 +28,8 @@ import { usePointOfSaleStore } from "@/store/pointOfSale.store";
 import { useUserStore } from "@/store/user.store";
 
 import type { CustomerPointOfSale } from "@/types/customer";
+
 import { COLORS, fonts } from "@/utils/styles";
-import { Ionicons } from "@expo/vector-icons";
 
 export default function CustomerListScreen() {
   // ============================================================
@@ -32,7 +37,9 @@ export default function CustomerListScreen() {
   // ============================================================
 
   const user = useUserStore((state) => state.user);
+
   const userRole = user?.role;
+
   const isManager = userRole === "MANAGER";
   const isEmployee = userRole === "EMPLOYEE";
 
@@ -55,7 +62,9 @@ export default function CustomerListScreen() {
     customers,
     pagination,
     search,
+
     selectedPointOfSale,
+    isAllPointOfSales,
 
     isLoading,
     isRefreshing,
@@ -65,10 +74,10 @@ export default function CustomerListScreen() {
 
     setAvailablePointOfSales,
     selectPointOfSale,
+    selectAllPointOfSales,
 
     fetchCustomers,
     refreshCustomers,
-    setSearch,
     searchCustomers,
     loadMoreCustomers,
 
@@ -127,16 +136,23 @@ export default function CustomerListScreen() {
     // ----------------------------------------------------------
     // MANAGER
     // ----------------------------------------------------------
+    //
+    // Le manager peut consulter :
+    // - tous les POS
+    // - un POS précis
+    //
 
     if (isManager) {
       setAvailablePointOfSales(activePointOfSales);
-
       return;
     }
 
     // ----------------------------------------------------------
     // EMPLOYEE
     // ----------------------------------------------------------
+    //
+    // L'employé ne voit que les POS auxquels il est assigné.
+    //
 
     if (isEmployee) {
       const assignedPointOfSales = activePointOfSales.filter((pointOfSale) => {
@@ -164,7 +180,7 @@ export default function CustomerListScreen() {
   ]);
 
   // ============================================================
-  // CHARGEMENT INITIAL DES CLIENTS
+  // CONFIGURATION DU SCOPE INITIAL
   // ============================================================
 
   useEffect(() => {
@@ -172,48 +188,110 @@ export default function CustomerListScreen() {
       return;
     }
 
-    // Aucun POS disponible pour l'employé :
-    // surtout ne pas appeler fetchCustomers().
-    if (isEmployee && !selectedPointOfSale) {
+    // ----------------------------------------------------------
+    // MANAGER
+    // ----------------------------------------------------------
+    //
+    // Par défaut, le manager travaille sur TOUS les POS.
+    //
+    // On ne sélectionne donc pas automatiquement le premier POS.
+    //
+
+    if (isManager) {
+      if (!isAllPointOfSales && !selectedPointOfSale) {
+        selectAllPointOfSales().catch((loadError) => {
+          console.error("Erreur chargement clients tous POS :", loadError);
+        });
+      }
+
       return;
     }
 
-    if (!selectedPointOfSale) {
-      return;
-    }
+    // ----------------------------------------------------------
+    // EMPLOYEE
+    // ----------------------------------------------------------
+    //
+    // L'employé doit avoir un POS assigné.
+    //
 
-    if (customers.length > 0) {
-      return;
-    }
+    if (isEmployee) {
+      const assignedPointOfSales = activePointOfSales.filter((pointOfSale) => {
+        const fullPointOfSale = pointOfSales.find(
+          (item) => item.id === pointOfSale.id,
+        );
 
-    fetchCustomers().catch((fetchError) => {
-      console.error("Erreur chargement clients :", fetchError);
-    });
-  }, [user, isEmployee, selectedPointOfSale, customers.length, fetchCustomers]);
+        return (
+          fullPointOfSale?.staffAssignments.some(
+            (assignment) =>
+              assignment.isActive && assignment.user.id === user.id,
+          ) ?? false
+        );
+      });
+
+      // Aucun POS assigné.
+      if (assignedPointOfSales.length === 0) {
+        return;
+      }
+
+      // POS déjà sélectionné et toujours valide.
+      const currentPointOfSaleIsValid =
+        selectedPointOfSale &&
+        assignedPointOfSales.some(
+          (pointOfSale) => pointOfSale.id === selectedPointOfSale.id,
+        );
+
+      if (currentPointOfSaleIsValid) {
+        return;
+      }
+
+      // Sélection du premier POS assigné.
+      selectPointOfSale(assignedPointOfSales[0]).catch((selectError) => {
+        console.error("Erreur sélection POS employé :", selectError);
+      });
+    }
+  }, [
+    user,
+    isManager,
+    isEmployee,
+    isAllPointOfSales,
+    selectedPointOfSale,
+    activePointOfSales,
+    pointOfSales,
+    selectAllPointOfSales,
+    selectPointOfSale,
+  ]);
+
+  // ============================================================
+  // SYNCHRONISATION DE LA RECHERCHE
+  // ============================================================
+
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
 
   // ============================================================
   // RECHERCHE
   // ============================================================
+
+  const canSearch = isManager
+    ? isAllPointOfSales || !!selectedPointOfSale
+    : !!selectedPointOfSale;
 
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
   };
 
   // ============================================================
-  // RECHERCHE DEBBOUNCE
+  // RECHERCHE DEBOUNCE
   // ============================================================
 
   useEffect(() => {
-    if (!selectedPointOfSale) {
+    if (!canSearch) {
       return;
     }
 
     const timeout = setTimeout(() => {
       const cleanSearch = searchInput.trim();
-
-      // Met à jour la recherche du store uniquement
-      // lorsque l'utilisateur a arrêté de taper.
-      setSearch(cleanSearch);
 
       searchCustomers(cleanSearch).catch((searchError) => {
         console.error("Erreur recherche clients :", searchError);
@@ -223,20 +301,22 @@ export default function CustomerListScreen() {
     return () => {
       clearTimeout(timeout);
     };
-  }, [searchInput, selectedPointOfSale, searchCustomers, setSearch]);
+  }, [searchInput, canSearch, searchCustomers]);
 
   // ============================================================
   // CHANGEMENT DE POS
   // ============================================================
 
-  const handlePointOfSaleChange = (pointOfSale: CustomerPointOfSale) => {
+  const handlePointOfSaleChange = (pointOfSale: CustomerPointOfSale | null) => {
+    // Même sélection : aucune action
     if (
-      pointOfSales.length === 0 ||
-      pointOfSale.id === selectedPointOfSale?.id
+      (pointOfSale === null && isAllPointOfSales) ||
+      (pointOfSale !== null &&
+        pointOfSale.id === selectedPointOfSale?.id &&
+        !isAllPointOfSales)
     ) {
       return;
     }
-
     selectPointOfSale(pointOfSale).catch((selectError) => {
       console.error("Erreur changement point de vente :", selectError);
     });
@@ -247,11 +327,8 @@ export default function CustomerListScreen() {
   // ============================================================
 
   const handleRefresh = async () => {
-    if (!selectedPointOfSale) {
-      return;
-    }
-
     try {
+      await refreshPointOfSales();
       await refreshCustomers();
     } catch (refreshError) {
       console.error("Erreur actualisation clients :", refreshError);
@@ -263,7 +340,16 @@ export default function CustomerListScreen() {
   // ============================================================
 
   const handleLoadMore = async () => {
-    if (isLoadingMore || !pagination?.hasNextPage || !selectedPointOfSale) {
+    if (isLoadingMore || !pagination?.hasNextPage) {
+      return;
+    }
+
+    // Pour un manager en mode ALL, aucun POS n'est requis.
+    //
+    // Pour un employé / manager sur un POS précis,
+    // le store connaît déjà le POS sélectionné.
+
+    if (isEmployee && !selectedPointOfSale) {
       return;
     }
 
@@ -280,6 +366,8 @@ export default function CustomerListScreen() {
 
   const hasNoPointOfSale = isEmployee && !selectedPointOfSale;
 
+  const hasCustomerScope = isAllPointOfSales || !!selectedPointOfSale;
+
   const hasSearch = search.trim().length > 0;
 
   const showSkeleton =
@@ -288,14 +376,22 @@ export default function CustomerListScreen() {
     !hasNoPointOfSale;
 
   const showNoCustomers =
-    !showSkeleton && !hasNoPointOfSale && customers.length === 0 && !hasSearch;
+    !showSkeleton &&
+    hasCustomerScope &&
+    customers.length === 0 &&
+    !hasSearch &&
+    !error;
 
   const showNoResults =
-    !showSkeleton && !hasNoPointOfSale && customers.length === 0 && hasSearch;
+    !showSkeleton &&
+    hasCustomerScope &&
+    customers.length === 0 &&
+    hasSearch &&
+    !error;
 
   const showErrorEmpty =
     !showSkeleton &&
-    !hasNoPointOfSale &&
+    hasCustomerScope &&
     customers.length === 0 &&
     !hasSearch &&
     !!error;
@@ -353,13 +449,13 @@ export default function CustomerListScreen() {
         )}
 
         {/* ================================================== */}
-        {/* EMPLOYEE SANS POS                                 */}
+        {/* EMPLOYEE SANS POS                                  */}
         {/* ================================================== */}
 
         {hasNoPointOfSale && <CustomerEmpty variant="no-point-of-sale" />}
 
         {/* ================================================== */}
-        {/* CONTENU CLIENTS                                   */}
+        {/* CONTENU CLIENTS                                    */}
         {/* ================================================== */}
 
         {!hasNoPointOfSale && (
@@ -372,7 +468,7 @@ export default function CustomerListScreen() {
               <CustomerSearchBar
                 value={searchInput}
                 onChangeText={handleSearchChange}
-                disabled={!selectedPointOfSale}
+                disabled={!hasCustomerScope}
               />
             </View>
 
@@ -380,7 +476,7 @@ export default function CustomerListScreen() {
             {/* STATS                                          */}
             {/* ---------------------------------------------- */}
 
-            {!showSkeleton && selectedPointOfSale && (
+            {!showSkeleton && hasCustomerScope && (
               <CustomerStats
                 totalCustomers={pagination?.total ?? customers.length}
                 pointOfSale={selectedPointOfSale}
@@ -409,10 +505,10 @@ export default function CustomerListScreen() {
             )}
 
             {/* ---------------------------------------------- */}
-            {/* ERREUR SANS CACHE                              */}
+            {/* ERREUR SANS CACHE                               */}
             {/* ---------------------------------------------- */}
 
-            {showErrorEmpty && !customers.length && (
+            {showErrorEmpty && (
               <View style={styles.errorContainer}>
                 <CustomerEmpty variant="no-customers" />
 
@@ -456,7 +552,7 @@ export default function CustomerListScreen() {
                   <CustomerCard
                     key={customer.id}
                     customer={customer}
-                    pointOfSaleId={selectedPointOfSale!.id}
+                    pointOfSaleId={selectedPointOfSale?.id}
                     disabled={isLoadingMore}
                   />
                 ))}
@@ -477,6 +573,10 @@ export default function CustomerListScreen() {
     </SafeAreaView>
   );
 }
+
+// ============================================================
+// STYLES
+// ============================================================
 
 const styles = StyleSheet.create({
   safeArea: {

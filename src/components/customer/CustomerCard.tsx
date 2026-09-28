@@ -1,18 +1,53 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { Customer } from "@/types/customer";
+import type { CustomerListItem } from "@/types/customer";
+
 import { COLORS, fonts } from "@/utils/styles";
 
+// ==========================================================
+// TYPES
+// ==========================================================
+
 interface CustomerCardProps {
-  customer: Customer;
+  customer: CustomerListItem;
+
+  /**
+   * POS actuellement utilisé pour le contexte client.
+   *
+   * - string  → liste filtrée sur un POS précis
+   * - undefined → tous les POS
+   */
+  pointOfSaleId?: string;
+
+  /**
+   * Libellé du POS courant.
+   *
+   * Permet d'afficher le nom/code sans dépendre du Customer,
+   * puisque le client est global à la boutique.
+   */
+  pointOfSaleLabel?: string;
+
+  /**
+   * Indique si la carte est momentanément désactivée.
+   */
   disabled?: boolean;
-  pointOfSaleId: string;
 }
 
-const formatAmount = (amount: number): string => {
-  return `${new Intl.NumberFormat("fr-FR").format(amount)} FC`;
+// ==========================================================
+// FORMATTERS
+// ==========================================================
+
+const formatAmount = (amount: string): string => {
+  const numericAmount = Number(amount);
+
+  if (!Number.isFinite(numericAmount)) {
+    return "0 FC";
+  }
+
+  return `${new Intl.NumberFormat("fr-FR").format(numericAmount)} FC`;
 };
 
 const formatDate = (date: string | null): string => {
@@ -33,6 +68,10 @@ const formatDate = (date: string | null): string => {
   });
 };
 
+// ==========================================================
+// HELPERS
+// ==========================================================
+
 const getInitials = (name: string | null, phone: string): string => {
   const cleanName = name?.trim();
 
@@ -49,20 +88,33 @@ const getInitials = (name: string | null, phone: string): string => {
   return phone.slice(-2);
 };
 
+// ==========================================================
+// COMPONENT
+// ==========================================================
+
 export function CustomerCard({
   customer,
   pointOfSaleId,
+  pointOfSaleLabel,
   disabled = false,
 }: CustomerCardProps) {
+  // ========================================================
+  // DATA
+  // ========================================================
+
   const initials = getInitials(customer.name, customer.phone);
+
+  const isAllPointOfSales = !pointOfSaleId;
+
+  const displayPointOfSale =
+    pointOfSaleLabel?.trim() || (isAllPointOfSales ? "Tous les PDV" : "PDV");
+
+  // ========================================================
+  // NAVIGATION
+  // ========================================================
 
   const handlePress = () => {
     if (disabled) {
-      return;
-    }
-
-    if (!pointOfSaleId) {
-      console.warn("Impossible d'ouvrir le client : POS manquant.");
       return;
     }
 
@@ -70,16 +122,25 @@ export function CustomerCard({
       pathname: "/settings/customer/[clientId]",
       params: {
         clientId: customer.id,
-        pointOfSaleId,
+
+        // En mode ALL, on n'envoie volontairement
+        // pas de pointOfSaleId.
+        ...(pointOfSaleId ? { pointOfSaleId } : {}),
       },
     });
   };
+
+  // ========================================================
+  // RENDER
+  // ========================================================
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
+
         disabled && styles.cardDisabled,
+
         pressed && !disabled && styles.cardPressed,
       ]}
       onPress={handlePress}
@@ -91,9 +152,17 @@ export function CustomerCard({
 
       <View style={styles.header}>
         <View style={styles.identity}>
+          {/* ---------------------------------------------- */}
+          {/* AVATAR                                         */}
+          {/* ---------------------------------------------- */}
+
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
+
+          {/* ---------------------------------------------- */}
+          {/* IDENTITY                                       */}
+          {/* ---------------------------------------------- */}
 
           <View style={styles.identityContent}>
             <Text style={styles.name} numberOfLines={1}>
@@ -109,6 +178,10 @@ export function CustomerCard({
             </View>
           </View>
         </View>
+
+        {/* ---------------------------------------------- */}
+        {/* CHEVRON                                        */}
+        {/* ---------------------------------------------- */}
 
         <View style={styles.chevron}>
           <Ionicons name="chevron-forward" size={17} color={COLORS.Gray} />
@@ -126,6 +199,10 @@ export function CustomerCard({
       {/* ================================================== */}
 
       <View style={styles.stats}>
+        {/* ---------------------------------------------- */}
+        {/* DEPENSE                                         */}
+        {/* ---------------------------------------------- */}
+
         <View style={styles.stat}>
           <View style={[styles.statIcon, styles.spentIcon]}>
             <Ionicons name="wallet-outline" size={15} color={COLORS.primary} />
@@ -140,7 +217,15 @@ export function CustomerCard({
           </View>
         </View>
 
+        {/* ---------------------------------------------- */}
+        {/* DIVIDER                                         */}
+        {/* ---------------------------------------------- */}
+
         <View style={styles.statDivider} />
+
+        {/* ---------------------------------------------- */}
+        {/* ACHATS                                          */}
+        {/* ---------------------------------------------- */}
 
         <View style={styles.stat}>
           <View style={[styles.statIcon, styles.purchaseIcon]}>
@@ -154,7 +239,15 @@ export function CustomerCard({
           </View>
         </View>
 
+        {/* ---------------------------------------------- */}
+        {/* DIVIDER                                         */}
+        {/* ---------------------------------------------- */}
+
         <View style={styles.statDivider} />
+
+        {/* ---------------------------------------------- */}
+        {/* POINTS                                          */}
+        {/* ---------------------------------------------- */}
 
         <View style={styles.stat}>
           <View style={[styles.statIcon, styles.pointsIcon]}>
@@ -174,6 +267,10 @@ export function CustomerCard({
       {/* ================================================== */}
 
       <View style={styles.footer}>
+        {/* ---------------------------------------------- */}
+        {/* DERNIER ACHAT                                  */}
+        {/* ---------------------------------------------- */}
+
         <View style={styles.lastPurchase}>
           <Ionicons name="time-outline" size={13} color={COLORS.Gray} />
 
@@ -184,6 +281,10 @@ export function CustomerCard({
           </Text>
         </View>
 
+        {/* ---------------------------------------------- */}
+        {/* POS                                            */}
+        {/* ---------------------------------------------- */}
+
         <View style={styles.posBadge}>
           <Ionicons
             name="storefront-outline"
@@ -192,7 +293,7 @@ export function CustomerCard({
           />
 
           <Text style={styles.posBadgeText} numberOfLines={1}>
-            {customer.pointOfSale?.code ?? "PDV"}
+            {displayPointOfSale}
           </Text>
         </View>
       </View>
@@ -200,10 +301,14 @@ export function CustomerCard({
   );
 }
 
+// ==========================================================
+// STYLES
+// ==========================================================
+
 const styles = StyleSheet.create({
-  // ==========================================================
+  // ========================================================
   // CARD
-  // ==========================================================
+  // ========================================================
 
   card: {
     marginBottom: 11,
@@ -227,9 +332,9 @@ const styles = StyleSheet.create({
     ],
   },
 
-  // ==========================================================
+  // ========================================================
   // HEADER
-  // ==========================================================
+  // ========================================================
 
   header: {
     flexDirection: "row",
@@ -292,9 +397,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F7F7F5",
   },
 
-  // ==========================================================
+  // ========================================================
   // SEPARATOR
-  // ==========================================================
+  // ========================================================
 
   separator: {
     height: 1,
@@ -302,9 +407,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0F0ED",
   },
 
-  // ==========================================================
+  // ========================================================
   // STATS
-  // ==========================================================
+  // ========================================================
 
   stats: {
     flexDirection: "row",
@@ -364,9 +469,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEEEEB",
   },
 
-  // ==========================================================
+  // ========================================================
   // FOOTER
-  // ==========================================================
+  // ========================================================
 
   footer: {
     marginTop: 12,
@@ -397,7 +502,7 @@ const styles = StyleSheet.create({
   },
 
   posBadge: {
-    maxWidth: 90,
+    maxWidth: 105,
     minHeight: 24,
     paddingHorizontal: 7,
     borderRadius: 8,

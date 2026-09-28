@@ -1,3 +1,5 @@
+
+import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   Modal,
@@ -9,14 +11,12 @@ import {
 } from "react-native";
 
 import { COLORS, fonts } from "@/utils/styles";
-
 import type { CustomerPointOfSale } from "@/types/customer";
-import React from "react";
 
 interface CustomerPosSelectorProps {
   pointOfSales: CustomerPointOfSale[];
   selectedPointOfSale: CustomerPointOfSale | null;
-  onSelect: (pointOfSale: CustomerPointOfSale) => void;
+  onSelect: (pointOfSale: CustomerPointOfSale | null) => void;
   disabled?: boolean;
 }
 
@@ -28,16 +28,24 @@ export function CustomerPosSelector({
 }: CustomerPosSelectorProps) {
   const [isOpen, setIsOpen] = React.useState(false);
 
-  const handleSelect = (pointOfSale: CustomerPointOfSale) => {
+  const hasPointOfSales = pointOfSales.length > 0;
+
+  /**
+   * null = Tous les points de vente
+   */
+  const isAllPointOfSales = selectedPointOfSale === null;
+
+  const handleSelect = (
+    pointOfSale: CustomerPointOfSale | null,
+  ) => {
     onSelect(pointOfSale);
     setIsOpen(false);
   };
 
-  const hasPointOfSales = pointOfSales.length > 0;
-
   return (
     <>
       <View style={styles.container}>
+        {/* Label */}
         <View style={styles.labelRow}>
           <View style={styles.labelIcon}>
             <Ionicons
@@ -50,6 +58,7 @@ export function CustomerPosSelector({
           <Text style={styles.label}>Point de vente</Text>
         </View>
 
+        {/* Selector */}
         <Pressable
           style={({ pressed }) => [
             styles.selector,
@@ -60,48 +69,77 @@ export function CustomerPosSelector({
           disabled={disabled || !hasPointOfSales}
         >
           <View style={styles.selectorContent}>
-            <View style={styles.selectedIcon}>
+            <View
+              style={[
+                styles.selectedIcon,
+                isAllPointOfSales && styles.selectedIconAll,
+              ]}
+            >
               <Ionicons
-                name="storefront-outline"
+                name={
+                  isAllPointOfSales
+                    ? "apps-outline"
+                    : "storefront-outline"
+                }
                 size={18}
                 color={COLORS.primary}
               />
             </View>
 
             <View style={styles.selectedContent}>
-              <Text style={styles.selectedName} numberOfLines={1}>
-                {selectedPointOfSale?.name ?? "Aucun point de vente"}
+              <Text
+                style={styles.selectedName}
+                numberOfLines={1}
+              >
+                {selectedPointOfSale?.name ??
+                  "Tous les points de vente"}
               </Text>
 
-              {selectedPointOfSale && (
+              {selectedPointOfSale ? (
                 <Text style={styles.selectedCode}>
                   {selectedPointOfSale.code}
+                </Text>
+              ) : (
+                <Text style={styles.selectedCode}>
+                  Vue globale
                 </Text>
               )}
             </View>
           </View>
 
-          <Ionicons name="chevron-down" size={18} color={COLORS.Gray} />
+          <Ionicons
+            name="chevron-down"
+            size={18}
+            color={COLORS.Gray}
+          />
         </Pressable>
       </View>
 
+      {/* Modal */}
       <Modal
         visible={isOpen}
         transparent
         animationType="fade"
         onRequestClose={() => setIsOpen(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setIsOpen(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setIsOpen(false)}
+        >
           <Pressable
             style={styles.modalCard}
             onPress={(event) => event.stopPropagation()}
           >
+            {/* Header */}
             <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>Choisir un point de vente</Text>
+              <View style={styles.modalHeaderContent}>
+                <Text style={styles.modalTitle}>
+                  Choisir un point de vente
+                </Text>
 
                 <Text style={styles.modalSubtitle}>
-                  Consultez les clients du point de vente sélectionné.
+                  Sélectionnez un point de vente ou consultez
+                  tous les clients.
                 </Text>
               </View>
 
@@ -110,38 +148,127 @@ export function CustomerPosSelector({
                 onPress={() => setIsOpen(false)}
                 hitSlop={8}
               >
-                <Ionicons name="close" size={19} color={COLORS.text} />
+                <Ionicons
+                  name="close"
+                  size={19}
+                  color={COLORS.text}
+                />
               </Pressable>
             </View>
 
+            {/* Liste */}
             <ScrollView
               style={styles.list}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
             >
+              {/* ==========================================
+                  TOUS LES POINTS DE VENTE
+              ========================================== */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.option,
+                  isAllPointOfSales &&
+                    styles.optionSelected,
+                  pressed && styles.optionPressed,
+                ]}
+                onPress={() => handleSelect(null)}
+              >
+                <View
+                  style={[
+                    styles.optionIcon,
+                    isAllPointOfSales &&
+                      styles.optionIconSelected,
+                  ]}
+                >
+                  <Ionicons
+                    name="apps-outline"
+                    size={18}
+                    color={
+                      isAllPointOfSales
+                        ? COLORS.white
+                        : COLORS.primary
+                    }
+                  />
+                </View>
+
+                <View style={styles.optionContent}>
+                  <View style={styles.optionNameRow}>
+                    <Text
+                      style={[
+                        styles.optionName,
+                        isAllPointOfSales &&
+                          styles.optionNameSelected,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Tous les points de vente
+                    </Text>
+
+                    <View style={styles.allBadge}>
+                      <Text style={styles.allBadgeText}>
+                        Global
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.optionCode,
+                      isAllPointOfSales &&
+                        styles.optionCodeSelected,
+                    ]}
+                  >
+                    Tous les clients
+                  </Text>
+                </View>
+
+                <View style={styles.checkContainer}>
+                  {isAllPointOfSales && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={21}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </View>
+              </Pressable>
+
+              {/* ==========================================
+                  POINTS DE VENTE
+              ========================================== */}
               {pointOfSales.map((pointOfSale) => {
-                const isSelected = selectedPointOfSale?.id === pointOfSale.id;
+                const isSelected =
+                  selectedPointOfSale?.id === pointOfSale.id;
 
                 return (
                   <Pressable
                     key={pointOfSale.id}
                     style={({ pressed }) => [
                       styles.option,
-                      isSelected && styles.optionSelected,
+                      isSelected &&
+                        styles.optionSelected,
                       pressed && styles.optionPressed,
                     ]}
-                    onPress={() => handleSelect(pointOfSale)}
+                    onPress={() =>
+                      handleSelect(pointOfSale)
+                    }
                   >
                     <View
                       style={[
                         styles.optionIcon,
-                        isSelected && styles.optionIconSelected,
+                        isSelected &&
+                          styles.optionIconSelected,
                       ]}
                     >
                       <Ionicons
                         name="storefront-outline"
                         size={18}
-                        color={isSelected ? COLORS.white : COLORS.primary}
+                        color={
+                          isSelected
+                            ? COLORS.white
+                            : COLORS.primary
+                        }
                       />
                     </View>
 
@@ -150,7 +277,8 @@ export function CustomerPosSelector({
                         <Text
                           style={[
                             styles.optionName,
-                            isSelected && styles.optionNameSelected,
+                            isSelected &&
+                              styles.optionNameSelected,
                           ]}
                           numberOfLines={1}
                         >
@@ -159,7 +287,9 @@ export function CustomerPosSelector({
 
                         {pointOfSale.isMainStore && (
                           <View style={styles.mainBadge}>
-                            <Text style={styles.mainBadgeText}>Principal</Text>
+                            <Text style={styles.mainBadgeText}>
+                              Principal
+                            </Text>
                           </View>
                         )}
                       </View>
@@ -167,7 +297,8 @@ export function CustomerPosSelector({
                       <Text
                         style={[
                           styles.optionCode,
-                          isSelected && styles.optionCodeSelected,
+                          isSelected &&
+                            styles.optionCodeSelected,
                         ]}
                       >
                         {pointOfSale.code}
@@ -252,6 +383,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#EDF4EB",
   },
 
+  selectedIconAll: {
+    backgroundColor: "#FFF4D9",
+  },
+
   selectedContent: {
     flex: 1,
     marginLeft: 10,
@@ -291,6 +426,11 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0ED",
+  },
+
+  modalHeaderContent: {
+    flex: 1,
+    paddingRight: 12,
   },
 
   modalTitle: {
@@ -405,6 +545,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 8,
     color: "#9A6900",
+  },
+
+  allBadge: {
+    marginLeft: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#E8F2E5",
+  },
+
+  allBadgeText: {
+    fontFamily: fonts.semibold,
+    fontSize: 8,
+    color: COLORS.primary,
   },
 
   checkContainer: {
