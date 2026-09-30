@@ -7,6 +7,7 @@ export interface User {
   email: string | null;
   image: string | null;
   role: UserRole;
+  mustChangePassword?: boolean;
 }
 
 export interface LoginRequest {
@@ -21,4 +22,34 @@ export interface LoginResponse {
     token: string;
     user: User;
   };
+}
+
+// ============================================================
+// FORGOT PASSWORD
+// ============================================================
+
+export interface ForgotPasswordRequest {
+  email: string;
+  telephone: string;
+}
+
+export interface ForgotPasswordResponse {
+  success: boolean;
+  message: string;
+  email?: string;
+}
+
+// ============================================================
+// CHANGE PASSWORD
+// ============================================================
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  success: boolean;
+  message: string;
 }

@@ -290,9 +290,7 @@ const LoginScreen = () => {
               {/* Forgot password */}
 
               <Pressable
-                onPress={() => {
-                  // TODO: écran mot de passe oublié
-                }}
+                onPress={() => router.push("/auth/forgetpassword")}
                 style={({ pressed }) => ({
                   alignSelf: "flex-end",
                   marginTop: 2,

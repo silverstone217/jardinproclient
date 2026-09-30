@@ -6,15 +6,33 @@ import Feather from "react-native-vector-icons/Feather";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 
+import { useShopPublicStore } from "@/store/shop-public.store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, Tabs, useRouter } from "expo-router";
 import React from "react";
-import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const MainLayout = () => {
   const user = useUserStore((state) => state.user);
+  const shop = useShopPublicStore((state) => state.shop);
+  const fetchShop = useShopPublicStore((state) => state.fetchShop);
   const router = useRouter();
+
+  React.useEffect(() => {
+    if (!shop) {
+      fetchShop().catch((error) => {
+        console.error("Erreur chargement boutique :", error);
+      });
+    }
+  }, [shop, fetchShop]);
 
   if (!user) {
     return <Redirect href="/auth" />;
@@ -65,11 +83,19 @@ const MainLayout = () => {
 
                   <View style={styles.brandContainer}>
                     <View style={styles.brandIcon}>
-                      <MaterialCommunityIcons
-                        name="leaf"
-                        size={19}
-                        color={COLORS.primary}
-                      />
+                      {shop?.logo ? (
+                        <Image
+                          source={{ uri: shop.logo }}
+                          style={styles.shopLogo}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <MaterialCommunityIcons
+                          name="leaf"
+                          size={19}
+                          color={COLORS.primary}
+                        />
+                      )}
                     </View>
 
                     <View>
@@ -216,6 +242,12 @@ const styles = StyleSheet.create({
   brandContainer: {
     flexDirection: "row",
     alignItems: "center",
+  },
+
+  shopLogo: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 13,
   },
 
   brandIcon: {

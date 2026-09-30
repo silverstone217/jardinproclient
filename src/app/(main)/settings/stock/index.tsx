@@ -39,11 +39,8 @@ export default function StockScreen() {
   const location = useStockStore((state) => state.location);
 
   const summary = useStockStore((state) => state.summary);
-
   const rawIngredients = useStockStore((state) => state.rawIngredients);
-
   const packagings = useStockStore((state) => state.packagings);
-
   const finishedProducts = useStockStore((state) => state.finishedProducts);
 
   const rawIngredientsPagination = useStockStore(
@@ -61,25 +58,16 @@ export default function StockScreen() {
   const filters = useStockStore((state) => state.filters);
 
   const isLoading = useStockStore((state) => state.isLoading);
-
   const isRefreshing = useStockStore((state) => state.isRefreshing);
-
   const isLoadingMore = useStockStore((state) => state.isLoadingMore);
-
   const error = useStockStore((state) => state.error);
 
   const initialize = useStockStore((state) => state.initialize);
-
   const refreshStock = useStockStore((state) => state.refreshStock);
-
   const loadMore = useStockStore((state) => state.loadMore);
-
   const setLocation = useStockStore((state) => state.setLocation);
-
   const setCategory = useStockStore((state) => state.setCategory);
-
   const setSearch = useStockStore((state) => state.setSearch);
-
   const setLowStock = useStockStore((state) => state.setLowStock);
 
   // ============================================================
@@ -95,7 +83,7 @@ export default function StockScreen() {
   // ============================================================
 
   useEffect(() => {
-    if (!user || pointOfSales.length > 0) {
+    if (!user || user.role !== "MANAGER" || pointOfSales.length > 0) {
       return;
     }
 
@@ -318,7 +306,7 @@ export default function StockScreen() {
 
             <StockLocationSelector
               role={role}
-              userId={userId}
+              // userId={userId}
               location={location}
               onLocationChange={handleLocationChange}
             />

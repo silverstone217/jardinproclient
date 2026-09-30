@@ -4,6 +4,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router } from "expo-router";
 import { useMemo } from "react";
 import {
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -96,12 +97,13 @@ function getInitials(name?: string | null) {
 
 export default function SettingsScreen() {
   const user = useUserStore((state) => state.user);
+  const logout = useUserStore((state) => state.logout);
 
   const userRole = user?.role ?? "EMPLOYEE";
 
   const sections = useMemo(() => {
-    const visibleLinks = LINKS_SETTINGS.filter((link) =>
-      link.roles.includes(userRole),
+    const visibleLinks = LINKS_SETTINGS.filter(
+      (link) => link.enabled && link.roles.includes(userRole),
     );
 
     return SECTION_ORDER.map((section) => {
@@ -119,6 +121,23 @@ export default function SettingsScreen() {
   };
 
   const displayName = formatName(user?.name);
+
+  const handleLogout = () => {
+    Alert.alert("Déconnexion", "Voulez-vous vraiment vous déconnecter ?", [
+      {
+        text: "Annuler",
+        style: "cancel",
+      },
+      {
+        text: "Déconnexion",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/auth");
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
@@ -230,6 +249,40 @@ export default function SettingsScreen() {
               />
             ))}
           </View>
+
+          {/* ───────────────────────────────────────── */}
+          {/* LOGOUT */}
+          {/* ───────────────────────────────────────── */}
+
+          <Pressable
+            onPress={handleLogout}
+            style={({ pressed }) => [
+              styles.logoutButton,
+              pressed && styles.logoutPressed,
+            ]}
+          >
+            <View style={styles.logoutIcon}>
+              <MaterialCommunityIcons
+                name="logout"
+                size={21}
+                color={COLORS.error}
+              />
+            </View>
+
+            <View style={styles.logoutContent}>
+              <Text style={styles.logoutTitle}>Déconnexion</Text>
+
+              <Text style={styles.logoutDescription}>
+                Se déconnecter de ce compte
+              </Text>
+            </View>
+
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={21}
+              color={COLORS.error}
+            />
+          </Pressable>
 
           {/* ─────────────────────────────── */}
           {/* FOOTER */}
@@ -359,6 +412,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingBottom: 20,
   },
 
   container: {
@@ -573,6 +627,56 @@ const styles = StyleSheet.create({
   },
 
   // ─────────────────────────────────────────
+  // LOGOUT
+  // ─────────────────────────────────────────
+
+  logoutButton: {
+    minHeight: 70,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#F1DADA",
+  },
+
+  logoutIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    backgroundColor: "#FDECEC",
+  },
+
+  logoutContent: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+
+  logoutTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: COLORS.error,
+    marginBottom: 3,
+  },
+
+  logoutDescription: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: COLORS.Gray,
+  },
+
+  logoutPressed: {
+    backgroundColor: "#FFF8F8",
+    opacity: 0.8,
+  },
+
+  // ─────────────────────────────────────────
   // SECTIONS
   // ─────────────────────────────────────────
 
@@ -684,7 +788,7 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: 4,
 
-    paddingTop: 8,
+    paddingTop: 20,
     paddingBottom: 10,
 
     alignItems: "center",

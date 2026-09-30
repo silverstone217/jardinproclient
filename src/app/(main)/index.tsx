@@ -1,11 +1,7 @@
-import { useUserStore } from "@/store/user.store";
-import { COLORS, fonts, fontSizes, typography } from "@/utils/styles";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
-  Alert,
-  Image,
-  Pressable,
+  ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,30 +9,61 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DashboardAction } from "@/components/dashboard/DashboardAction";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
+import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
+import { useDashboardStore } from "@/store/dashboard.store";
+import { useUserStore } from "@/store/user.store";
+import { COLORS, fonts, fontSizes } from "@/utils/styles";
+
 export default function Index() {
-  const user = useUserStore((s) => s.user);
-  const router = useRouter();
+  const user = useUserStore((state) => state.user);
 
-  const logUser = useUserStore((s) => s.logout);
+  const dashboard = useDashboardStore((state) => state.dashboard);
+  const isLoading = useDashboardStore((state) => state.isLoading);
+  const isRefreshing = useDashboardStore((state) => state.isRefreshing);
+  const error = useDashboardStore((state) => state.error);
+  const initializeDashboard = useDashboardStore((state) => state.initialize);
+  const refreshDashboard = useDashboardStore((state) => state.refreshDashboard);
 
-  const [loading, setLoading] = useState(false);
-
-  if (!user) return null;
-
-  const firstName = user.name.trim().split(" ")[0];
-
-  const handleLogout = async () => {
-    try {
-      setLoading(true);
-
-      await logUser();
-
-      // setTimeout(() => router.replace("/auth"), 2200);
-    } catch (error) {
-      Alert.alert("Oops! Erreur", "Impossible de vous deconnecter");
-      console.log(error);
+  useEffect(() => {
+    if (!user?.id) {
+      return;
     }
-  };
+
+    initializeDashboard(user.id);
+  }, [user?.id, initializeDashboard]);
+
+  const handleRefresh = useCallback(async () => {
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      await refreshDashboard(user.id);
+    } catch {
+      // Le store conserve le cache existant en cas d'erreur réseau.
+    }
+  }, [user?.id, refreshDashboard]);
+
+  /*
+   * Pour l'instant, la commande locale n'est pas encore branchée ici.
+   *
+   * Lorsque le store de commande sera intégré, cette valeur viendra
+   * directement du store local.
+   */
+  const currentOrder = useMemo(() => {
+    return null;
+  }, []);
+
+  if (!user) {
+    return null;
+  }
+
+  const firstName = user.name.trim().split(" ")[0] || "Utilisateur";
+
+  const showInitialLoader = isLoading && !dashboard;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
@@ -44,62 +71,57 @@ export default function Index() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+          />
+        }
       >
-        {/* GREETINGS */}
-        <View style={styles.header}>
-          <View style={styles.greetingContainer}>
-            <Text style={styles.greeting}>Bonjour, {firstName} 👋</Text>
+        <DashboardHeader userName={user.name} userImage={user.image} />
 
-            <Text style={styles.subtitle}>
-              Prête pour une nouvelle journée fruitée ?
+        <DashboardAction />
+
+        {showInitialLoader ? (
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+
+            <Text style={styles.loaderText}>
+              Chargement du tableau de bord...
             </Text>
           </View>
-
-          {/* USER AVATAR */}
-          <Pressable
-            style={styles.avatar}
-            onPress={() => router.push("/settings")}
-          >
-            {user.image ? (
-              // Si tu as déjà un composant Avatar,
-
-              // tu peux le remplacer ici.
-              <View style={styles.avatarFallback}>
-                <Image
-                  source={{ uri: user.image }}
-                  style={{ width: 46, height: 46, borderRadius: 23 }}
-                  resizeMode="cover"
-                />
-              </View>
+        ) : dashboard ? (
+          <>
+            {dashboard.role === "MANAGER" ? (
+              <ManagerDashboard dashboard={dashboard} />
             ) : (
-              <Text style={styles.avatarText}>
-                {firstName.charAt(0).toUpperCase()}
-              </Text>
+              <EmployeeDashboard
+                dashboard={dashboard}
+                currentOrder={currentOrder}
+              />
             )}
-          </Pressable>
-        </View>
+          </>
+        ) : (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>
+              Impossible de charger le tableau de bord
+            </Text>
 
-        {/* NEW BUTTON */}
-        <Pressable
-          onPress={handleLogout}
-          style={{
-            padding: 20,
-            backgroundColor: COLORS.error,
-            marginTop: 20,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 20,
-          }}
-        >
-          <Text
-            style={[
-              typography.bodyMedium,
-              { fontSize: 14, color: COLORS.neutral },
-            ]}
-          >
-            {loading ? "En cours..." : "Deconnexion"}
+            <Text style={styles.errorText}>
+              {error ||
+                "Une erreur est survenue. Faites glisser vers le bas pour réessayer."}
+            </Text>
+          </View>
+        )}
+
+        {dashboard && error && !isRefreshing && (
+          <Text style={styles.offlineText}>
+            Données affichées depuis le dernier chargement.
           </Text>
-        </Pressable>
+        )}
+
+        <Text style={styles.greetingHidden}>{firstName}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -109,85 +131,63 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.neutral,
+    paddingBottom: 60,
   },
 
   scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingBottom: 30,
   },
 
-  // HEADER
-  headerGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  headerSubGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  // LOGO
-  headerLogo: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    backgroundColor: "#E7F0E5",
+  loaderContainer: {
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 60,
   },
 
-  // GREETING
-  /* HEADER */
-
-  header: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  greetingContainer: {
-    flex: 1,
-    gap: 4,
-  },
-
-  greeting: {
-    marginTop: 20,
-    fontFamily: fonts.light,
-    fontSize: fontSizes.lessoverlarge,
-    color: COLORS.text,
-    textTransform: "capitalize",
-  },
-
-  subtitle: {
+  loaderText: {
+    marginTop: 10,
     fontFamily: fonts.regular,
     fontSize: fontSizes.small,
-    color: COLORS.darkGray,
-    lineHeight: fontSizes.small * 1.4,
+    color: COLORS.Gray,
   },
 
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: COLORS.primary,
+  errorContainer: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    padding: 20,
+    borderRadius: 18,
     alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 12,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: "#EEEEEE",
   },
 
-  avatarFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  avatarText: {
-    fontFamily: fonts.semibold,
+  errorTitle: {
+    fontFamily: fonts.bold,
     fontSize: fontSizes.medium,
-    color: COLORS.background,
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  errorText: {
+    marginTop: 7,
+    fontFamily: fonts.regular,
+    fontSize: fontSizes.small,
+    lineHeight: 20,
+    color: COLORS.Gray,
+    textAlign: "center",
+  },
+
+  offlineText: {
+    marginTop: 4,
+    paddingHorizontal: 20,
+    fontFamily: fonts.regular,
+    fontSize: fontSizes.small - 1,
+    color: COLORS.Gray,
+    textAlign: "center",
+  },
+
+  greetingHidden: {
+    display: "none",
   },
 });

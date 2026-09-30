@@ -6,14 +6,11 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { usePointOfSaleStore } from "@/store/pointOfSale.store";
-
 import { COLORS, fonts } from "@/utils/styles";
 
 interface StockLocationSelectorProps {
   role: "MANAGER" | "EMPLOYEE";
-  userId: string;
   location: StockTypes.StockLocationInfo | null;
   onLocationChange: (
     location: StockTypes.StockLocationInfo,
@@ -22,23 +19,24 @@ interface StockLocationSelectorProps {
 
 export function StockLocationSelector({
   role,
-  userId,
   location,
   onLocationChange,
 }: StockLocationSelectorProps) {
   const { pointOfSales, isLoading } = usePointOfSaleStore();
 
   // ============================================================
-  // EMPLOYÉS
+  // EMPLOYÉ
   // ============================================================
 
-  const assignedPointOfSales = pointOfSales.filter(
-    (pointOfSale) =>
-      pointOfSale.isActive &&
-      pointOfSale.staffAssignments.some(
-        (assignment) => assignment.isActive && assignment.user.id === userId,
-      ),
-  );
+  /**
+   * Pour un employé, le backend / stock.store détermine
+   * automatiquement son emplacement via son affectation.
+   *
+   * On ne consulte donc PAS pointOfSale.store pour chercher
+   * les POS de l'employé.
+   */
+  const employeeLocation =
+    role === "EMPLOYEE" && location?.type === "POS" ? location : null;
 
   // ============================================================
   // EMPLACEMENTS DISPONIBLES
@@ -47,6 +45,9 @@ export function StockLocationSelector({
   const availableLocations: StockTypes.StockLocationInfo[] =
     role === "MANAGER"
       ? [
+          // --------------------------------------------------------
+          // BOUTIQUE PRINCIPALE / STOCK CENTRAL
+          // --------------------------------------------------------
           {
             type: "MAIN",
             pointOfSaleId: null,
@@ -54,10 +55,12 @@ export function StockLocationSelector({
             code: "MAIN",
           },
 
+          // --------------------------------------------------------
+          // TOUS LES POS ACTIFS
+          // Inclut également le POS principal (isMainStore = true)
+          // --------------------------------------------------------
           ...pointOfSales
-            .filter(
-              (pointOfSale) => pointOfSale.isActive && !pointOfSale.isMainStore,
-            )
+            .filter((pointOfSale) => pointOfSale.isActive)
             .map((pointOfSale) => ({
               type: "POS" as const,
               pointOfSaleId: pointOfSale.id,
@@ -65,12 +68,9 @@ export function StockLocationSelector({
               code: pointOfSale.code,
             })),
         ]
-      : assignedPointOfSales.map((pointOfSale) => ({
-          type: "POS" as const,
-          pointOfSaleId: pointOfSale.id,
-          name: pointOfSale.name,
-          code: pointOfSale.code,
-        }));
+      : employeeLocation
+        ? [employeeLocation]
+        : [];
 
   // ============================================================
   // SÉLECTION
@@ -93,7 +93,13 @@ export function StockLocationSelector({
   // LOADING
   // ============================================================
 
-  if (isLoading && pointOfSales.length === 0) {
+  /**
+   * Le chargement de la liste des POS concerne uniquement
+   * le manager.
+   *
+   * L'employé ne doit pas attendre pointOfSale.store.
+   */
+  if (role === "MANAGER" && isLoading && pointOfSales.length === 0) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>

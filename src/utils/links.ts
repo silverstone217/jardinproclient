@@ -16,6 +16,7 @@ export type SettingsLink = {
   icon: string;
   section: SettingsSection;
   roles: UserRole[];
+  enabled?: boolean;
 };
 
 export const LINKS_SETTINGS: SettingsLink[] = [
@@ -30,6 +31,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "user",
     section: "account",
     roles: ["MANAGER", "EMPLOYEE"],
+    enabled: true,
   },
 
   {
@@ -39,6 +41,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "lock",
     section: "account",
     roles: ["MANAGER", "EMPLOYEE"],
+    enabled: true,
   },
 
   // ─────────────────────────────────────
@@ -52,6 +55,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "shopping-bag",
     section: "business",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   {
@@ -61,6 +65,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "map-pin",
     section: "business",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   {
@@ -70,6 +75,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "users",
     section: "business",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   // ─────────────────────────────────────
@@ -83,6 +89,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "coffee",
     section: "catalog",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   {
@@ -92,6 +99,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "box",
     section: "catalog",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   // ─────────────────────────────────────
@@ -105,6 +113,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "package",
     section: "catalog",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   {
@@ -114,6 +123,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "activity",
     section: "inventory",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   {
@@ -122,7 +132,8 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     description: "Consulter les stocks et suivre les mouvements",
     icon: "archive",
     section: "inventory",
-    roles: ["MANAGER"],
+    roles: ["MANAGER", "EMPLOYEE"],
+    enabled: true,
   },
 
   {
@@ -132,6 +143,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "truck",
     section: "inventory",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   {
@@ -141,6 +153,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "alert-triangle",
     section: "inventory",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   // ─────────────────────────────────────
@@ -154,6 +167,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "file-text",
     section: "reports",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   // ─────────────────────────────────────
@@ -167,6 +181,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "users",
     section: "customers",
     roles: ["MANAGER", "EMPLOYEE"],
+    enabled: true,
   },
 
   {
@@ -176,6 +191,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "star",
     section: "customers",
     roles: ["MANAGER"],
+    enabled: true,
   },
 
   // ─────────────────────────────────────
@@ -189,6 +205,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "bell",
     section: "system",
     roles: ["MANAGER", "EMPLOYEE"],
+    enabled: false,
   },
 
   {
@@ -198,6 +215,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
     icon: "sliders",
     section: "system",
     roles: ["MANAGER", "EMPLOYEE"],
+    enabled: false,
   },
 ];
 
