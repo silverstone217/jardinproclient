@@ -1,7 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-
 import {
   Pressable,
   RefreshControl,
@@ -10,10 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { SafeAreaView } from "react-native-safe-area-context";
-
-import { Ionicons } from "@expo/vector-icons";
 
 import { CustomerCard } from "@/components/customer/CustomerCard";
 import { CustomerEmpty } from "@/components/customer/CustomerEmpty";
@@ -28,8 +24,10 @@ import { usePointOfSaleStore } from "@/store/pointOfSale.store";
 import { useUserStore } from "@/store/user.store";
 
 import type { CustomerPointOfSale } from "@/types/customer";
-
 import { COLORS, fonts } from "@/utils/styles";
+
+const NO_POINT_OF_SALE_MESSAGE =
+  "Aucun point de vente actif ne vous est attribué";
 
 export default function CustomerListScreen() {
   // ============================================================
@@ -39,13 +37,15 @@ export default function CustomerListScreen() {
   const user = useUserStore((state) => state.user);
 
   const userRole = user?.role;
-
   const isManager = userRole === "MANAGER";
   const isEmployee = userRole === "EMPLOYEE";
 
   // ============================================================
   // POINTS DE VENTE
   // ============================================================
+  // IMPORTANT :
+  // Le store POS est utilisé uniquement par le MANAGER.
+  // L'employé ne doit pas appeler /point-of-sale.
 
   const {
     pointOfSales,
@@ -62,25 +62,19 @@ export default function CustomerListScreen() {
     customers,
     pagination,
     search,
-
     selectedPointOfSale,
     isAllPointOfSales,
-
     isLoading,
     isRefreshing,
     isLoadingMore,
-
     error,
-
     setAvailablePointOfSales,
     selectPointOfSale,
     selectAllPointOfSales,
-
     fetchCustomers,
     refreshCustomers,
     searchCustomers,
     loadMoreCustomers,
-
     clearError,
   } = useCustomerStore();
 
@@ -92,7 +86,7 @@ export default function CustomerListScreen() {
 
   const activePointOfSales = useMemo<CustomerPointOfSale[]>(() => {
     return pointOfSales
-      .filter((pointOfSale) => pointOfSale.isActive)
+      .filter((pointOfSale) => pointOfSale.isActive && !pointOfSale.isMainStore)
       .map((pointOfSale) => ({
         id: pointOfSale.id,
         name: pointOfSale.name,
@@ -103,25 +97,75 @@ export default function CustomerListScreen() {
   }, [pointOfSales]);
 
   // ============================================================
-  // CHARGEMENT DES POS
+  // CHARGEMENT INITIAL
   // ============================================================
+  //
+  // MANAGER :
+  //   charge les POS pour le sélecteur.
+  //
+  // EMPLOYEE :
+  //   ne charge PAS les POS.
+  //   Le backend /customer détermine son POS via StaffAssignment.
+  //
 
   useFocusEffect(
     useCallback(() => {
-      const loadPointOfSales = async () => {
-        try {
-          if (pointOfSales.length === 0) {
-            await fetchPointOfSales();
-          } else {
-            await refreshPointOfSales();
-          }
-        } catch (loadError) {
-          console.error("Erreur chargement points de vente :", loadError);
-        }
-      };
+      if (!user) {
+        return;
+      }
 
-      loadPointOfSales();
-    }, [pointOfSales.length, fetchPointOfSales, refreshPointOfSales]),
+      // ----------------------------------------------------------
+      // MANAGER
+      // ----------------------------------------------------------
+
+      if (isManager) {
+        const loadPointOfSales = async () => {
+          try {
+            if (pointOfSales.length === 0) {
+              await fetchPointOfSales();
+            } else {
+              await refreshPointOfSales();
+            }
+          } catch (loadError) {
+            console.error("Erreur chargement points de vente :", loadError);
+          }
+        };
+
+        loadPointOfSales();
+        return;
+      }
+
+      // ----------------------------------------------------------
+      // EMPLOYEE
+      // ----------------------------------------------------------
+      //
+      // Aucun appel à /point-of-sale.
+      //
+      // Le backend résout :
+      //
+      // User
+      //   ↓
+      // StaffAssignment
+      //   ↓
+      // PointOfSale
+      //   ↓
+      // Customers
+      //
+
+      if (isEmployee) {
+        fetchCustomers().catch((loadError) => {
+          console.error("Erreur chargement clients employé :", loadError);
+        });
+      }
+    }, [
+      user,
+      isManager,
+      isEmployee,
+      pointOfSales.length,
+      fetchPointOfSales,
+      refreshPointOfSales,
+      fetchCustomers,
+    ]),
   );
 
   // ============================================================
@@ -129,140 +173,39 @@ export default function CustomerListScreen() {
   // ============================================================
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !isManager) {
       return;
     }
 
-    // ----------------------------------------------------------
-    // MANAGER
-    // ----------------------------------------------------------
-    //
-    // Le manager peut consulter :
-    // - tous les POS
-    // - un POS précis
-    //
-
-    if (isManager) {
-      setAvailablePointOfSales(activePointOfSales);
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // EMPLOYEE
-    // ----------------------------------------------------------
-    //
-    // L'employé ne voit que les POS auxquels il est assigné.
-    //
-
-    if (isEmployee) {
-      const assignedPointOfSales = activePointOfSales.filter((pointOfSale) => {
-        const fullPointOfSale = pointOfSales.find(
-          (item) => item.id === pointOfSale.id,
-        );
-
-        return (
-          fullPointOfSale?.staffAssignments.some(
-            (assignment) =>
-              assignment.isActive && assignment.user.id === user.id,
-          ) ?? false
-        );
-      });
-
-      setAvailablePointOfSales(assignedPointOfSales);
-    }
-  }, [
-    user,
-    isManager,
-    isEmployee,
-    activePointOfSales,
-    pointOfSales,
-    setAvailablePointOfSales,
-  ]);
+    setAvailablePointOfSales(activePointOfSales);
+  }, [user, isManager, activePointOfSales, setAvailablePointOfSales]);
 
   // ============================================================
-  // CONFIGURATION DU SCOPE INITIAL
+  // CONFIGURATION DU SCOPE MANAGER
   // ============================================================
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !isManager) {
       return;
     }
 
-    // ----------------------------------------------------------
-    // MANAGER
-    // ----------------------------------------------------------
-    //
-    // Par défaut, le manager travaille sur TOUS les POS.
-    //
-    // On ne sélectionne donc pas automatiquement le premier POS.
-    //
-
-    if (isManager) {
-      if (!isAllPointOfSales && !selectedPointOfSale) {
-        selectAllPointOfSales().catch((loadError) => {
-          console.error("Erreur chargement clients tous POS :", loadError);
-        });
-      }
-
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // EMPLOYEE
-    // ----------------------------------------------------------
-    //
-    // L'employé doit avoir un POS assigné.
-    //
-
-    if (isEmployee) {
-      const assignedPointOfSales = activePointOfSales.filter((pointOfSale) => {
-        const fullPointOfSale = pointOfSales.find(
-          (item) => item.id === pointOfSale.id,
-        );
-
-        return (
-          fullPointOfSale?.staffAssignments.some(
-            (assignment) =>
-              assignment.isActive && assignment.user.id === user.id,
-          ) ?? false
-        );
-      });
-
-      // Aucun POS assigné.
-      if (assignedPointOfSales.length === 0) {
-        return;
-      }
-
-      // POS déjà sélectionné et toujours valide.
-      const currentPointOfSaleIsValid =
-        selectedPointOfSale &&
-        assignedPointOfSales.some(
-          (pointOfSale) => pointOfSale.id === selectedPointOfSale.id,
-        );
-
-      if (currentPointOfSaleIsValid) {
-        return;
-      }
-
-      // Sélection du premier POS assigné.
-      selectPointOfSale(assignedPointOfSales[0]).catch((selectError) => {
-        console.error("Erreur sélection POS employé :", selectError);
+    // Par défaut :
+    // TOUS LES POS.
+    if (!isAllPointOfSales && !selectedPointOfSale) {
+      selectAllPointOfSales().catch((loadError) => {
+        console.error("Erreur chargement clients tous POS :", loadError);
       });
     }
   }, [
     user,
     isManager,
-    isEmployee,
     isAllPointOfSales,
     selectedPointOfSale,
-    activePointOfSales,
-    pointOfSales,
     selectAllPointOfSales,
-    selectPointOfSale,
   ]);
 
   // ============================================================
-  // SYNCHRONISATION DE LA RECHERCHE
+  // SYNCHRONISATION RECHERCHE
   // ============================================================
 
   useEffect(() => {
@@ -270,12 +213,28 @@ export default function CustomerListScreen() {
   }, [search]);
 
   // ============================================================
+  // SCOPE CLIENT
+  // ============================================================
+  //
+  // MANAGER :
+  //   ALL ou POS sélectionné.
+  //
+  // EMPLOYEE :
+  //   le scope est déterminé par le backend.
+  //
+  // Donc pour l'employé, selectedPointOfSale === null
+  // ne signifie PAS automatiquement "aucun POS".
+  //
+
+  const hasNoPointOfSale = isEmployee && error === NO_POINT_OF_SALE_MESSAGE;
+
+  const hasCustomerScope = isManager
+    ? isAllPointOfSales || !!selectedPointOfSale
+    : !hasNoPointOfSale;
+
+  // ============================================================
   // RECHERCHE
   // ============================================================
-
-  const canSearch = isManager
-    ? isAllPointOfSales || !!selectedPointOfSale
-    : !!selectedPointOfSale;
 
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
@@ -286,7 +245,7 @@ export default function CustomerListScreen() {
   // ============================================================
 
   useEffect(() => {
-    if (!canSearch) {
+    if (!hasCustomerScope || hasNoPointOfSale) {
       return;
     }
 
@@ -301,14 +260,15 @@ export default function CustomerListScreen() {
     return () => {
       clearTimeout(timeout);
     };
-  }, [searchInput, canSearch, searchCustomers]);
+  }, [searchInput, hasCustomerScope, hasNoPointOfSale, searchCustomers]);
 
   // ============================================================
   // CHANGEMENT DE POS
   // ============================================================
 
   const handlePointOfSaleChange = (pointOfSale: CustomerPointOfSale | null) => {
-    // Même sélection : aucune action
+    // Cette fonction n'est utilisée que par le manager.
+
     if (
       (pointOfSale === null && isAllPointOfSales) ||
       (pointOfSale !== null &&
@@ -317,6 +277,7 @@ export default function CustomerListScreen() {
     ) {
       return;
     }
+
     selectPointOfSale(pointOfSale).catch((selectError) => {
       console.error("Erreur changement point de vente :", selectError);
     });
@@ -328,7 +289,14 @@ export default function CustomerListScreen() {
 
   const handleRefresh = async () => {
     try {
-      await refreshPointOfSales();
+      // Seul le manager doit rafraîchir les POS.
+      if (isManager) {
+        await refreshPointOfSales();
+      }
+
+      // Pour l'employé :
+      // refreshCustomers() appelle /customer sans POS,
+      // donc le serveur résout automatiquement son affectation.
       await refreshCustomers();
     } catch (refreshError) {
       console.error("Erreur actualisation clients :", refreshError);
@@ -344,15 +312,9 @@ export default function CustomerListScreen() {
       return;
     }
 
-    // Pour un manager en mode ALL, aucun POS n'est requis.
-    //
-    // Pour un employé / manager sur un POS précis,
-    // le store connaît déjà le POS sélectionné.
-
-    if (isEmployee && !selectedPointOfSale) {
-      return;
-    }
-
+    // Un employé peut charger davantage même si
+    // selectedPointOfSale est null :
+    // son scope est résolu côté serveur.
     try {
       await loadMoreCustomers();
     } catch (loadError) {
@@ -364,14 +326,10 @@ export default function CustomerListScreen() {
   // ETATS
   // ============================================================
 
-  const hasNoPointOfSale = isEmployee && !selectedPointOfSale;
-
-  const hasCustomerScope = isAllPointOfSales || !!selectedPointOfSale;
-
   const hasSearch = search.trim().length > 0;
 
   const showSkeleton =
-    (isLoading || isLoadingPointOfSales) &&
+    (isLoading || (isManager && isLoadingPointOfSales)) &&
     customers.length === 0 &&
     !hasNoPointOfSale;
 
@@ -409,7 +367,7 @@ export default function CustomerListScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing || isLoadingPointOfSales}
+            refreshing={isRefreshing || (isManager && isLoadingPointOfSales)}
             onRefresh={handleRefresh}
             tintColor={COLORS.primary}
             colors={[COLORS.primary]}
@@ -434,7 +392,7 @@ export default function CustomerListScreen() {
         <CustomerHeader />
 
         {/* ================================================== */}
-        {/* POS SELECTOR — MANAGER UNIQUEMENT                 */}
+        {/* POS SELECTOR — MANAGER UNIQUEMENT                  */}
         {/* ================================================== */}
 
         {isManager && activePointOfSales.length > 0 && (
@@ -455,7 +413,7 @@ export default function CustomerListScreen() {
         {hasNoPointOfSale && <CustomerEmpty variant="no-point-of-sale" />}
 
         {/* ================================================== */}
-        {/* CONTENU CLIENTS                                    */}
+        {/* CONTENU CLIENTS                                   */}
         {/* ================================================== */}
 
         {!hasNoPointOfSale && (
@@ -479,7 +437,7 @@ export default function CustomerListScreen() {
             {!showSkeleton && hasCustomerScope && (
               <CustomerStats
                 totalCustomers={pagination?.total ?? customers.length}
-                pointOfSale={selectedPointOfSale}
+                pointOfSale={isManager ? selectedPointOfSale : null}
                 isSearching={hasSearch}
               />
             )}
@@ -552,12 +510,13 @@ export default function CustomerListScreen() {
                   <CustomerCard
                     key={customer.id}
                     customer={customer}
-                    pointOfSaleId={selectedPointOfSale?.id}
+                    pointOfSaleId={
+                      isManager ? selectedPointOfSale?.id : undefined
+                    }
                     disabled={isLoadingMore}
                   />
                 ))}
 
-                {/* Chargement pagination */}
                 {isLoadingMore && <CustomerListSkeleton count={2} />}
               </View>
             )}
