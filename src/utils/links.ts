@@ -148,7 +148,7 @@ export const LINKS_SETTINGS: SettingsLink[] = [
   // ─────────────────────────────────────
 
   {
-    label: "Rapports & exports",
+    label: "Rapports",
     value: "/settings/reports",
     description: "Consulter, imprimer et exporter les données de la boutique",
     icon: "file-text",
