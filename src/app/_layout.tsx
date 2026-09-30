@@ -17,7 +17,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   // Le splash peut déjà être contrôlé par Expo.
 });
 
-const MIN_SPLASH_DURATION = 4000;
+const MIN_SPLASH_DURATION = 5000;
 
 export default function RootLayout() {
   let [fontsLoaded] = useFonts({

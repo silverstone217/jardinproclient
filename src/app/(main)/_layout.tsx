@@ -3,21 +3,13 @@ import { APP_NAME } from "@/utils/data";
 import { COLORS, fonts, fontSizes } from "@/utils/styles";
 
 import Feather from "react-native-vector-icons/Feather";
-import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 
 import { useShopPublicStore } from "@/store/shop-public.store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, Tabs, useRouter } from "expo-router";
 import React from "react";
-import {
-  Image,
-  Pressable,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const MainLayout = () => {
@@ -109,7 +101,7 @@ const MainLayout = () => {
 
                   {/* Notifications */}
 
-                  <Pressable
+                  {/* <Pressable
                     style={({ pressed }) => [
                       styles.notificationButton,
                       pressed && styles.pressed,
@@ -124,7 +116,7 @@ const MainLayout = () => {
                     />
 
                     <View style={styles.notificationBadge} />
-                  </Pressable>
+                  </Pressable> */}
                 </View>
               </SafeAreaView>
             ),

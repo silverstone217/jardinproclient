@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -32,7 +31,7 @@ export function DashboardHeader({
       </View>
 
       <View style={styles.actions}>
-        <Pressable
+        {/* <Pressable
           style={({ pressed }) => [
             styles.iconButton,
             pressed && styles.pressed,
@@ -44,7 +43,7 @@ export function DashboardHeader({
             size={21}
             color={COLORS.text}
           />
-        </Pressable>
+        </Pressable> */}
 
         <Pressable
           style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
