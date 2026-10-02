@@ -75,7 +75,7 @@ export function CurrentOrderCard({
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 20,
+    // marginHorizontal: 20,
     marginBottom: 20,
     padding: 16,
     borderRadius: 20,

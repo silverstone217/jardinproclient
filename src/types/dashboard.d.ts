@@ -5,7 +5,6 @@ export type DashboardStock = {
 
 export type DashboardRecentOrder = {
   id: string;
-  pointOfSaleName: string;
   createdAt: string;
 };
 

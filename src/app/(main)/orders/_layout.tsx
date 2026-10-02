@@ -35,13 +35,6 @@ export default function OrdersLayout() {
           title: "Aperçu",
         }}
       />
-
-      <Stack.Screen
-        name="invoice"
-        options={{
-          title: "Facture",
-        }}
-      />
     </Stack>
   );
 }

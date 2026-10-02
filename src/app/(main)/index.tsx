@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
+
 import {
   ActivityIndicator,
   RefreshControl,
@@ -7,25 +8,56 @@ import {
   Text,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DashboardAction } from "@/components/dashboard/DashboardAction";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
 import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
+
 import { useDashboardStore } from "@/store/dashboard.store";
+import { useOrderStore } from "@/store/order.store";
 import { useUserStore } from "@/store/user.store";
+
 import { COLORS, fonts, fontSizes } from "@/utils/styles";
 
 export default function Index() {
+  // ============================================================
+  // USER
+  // ============================================================
+
   const user = useUserStore((state) => state.user);
 
+  // ============================================================
+  // DASHBOARD
+  // ============================================================
+
   const dashboard = useDashboardStore((state) => state.dashboard);
+
   const isLoading = useDashboardStore((state) => state.isLoading);
+
   const isRefreshing = useDashboardStore((state) => state.isRefreshing);
+
   const error = useDashboardStore((state) => state.error);
+
   const initializeDashboard = useDashboardStore((state) => state.initialize);
+
   const refreshDashboard = useDashboardStore((state) => state.refreshDashboard);
+
+  // ============================================================
+  // COMMANDE LOCALE
+  // ============================================================
+
+  const hasActiveOrder = useOrderStore((state) => state.hasActiveOrder);
+
+  const cart = useOrderStore((state) => state.cart);
+
+  const hydrateOrder = useOrderStore((state) => state.hydrateOrder);
+
+  // ============================================================
+  // INITIALISATION DASHBOARD
+  // ============================================================
 
   useEffect(() => {
     if (!user?.id) {
@@ -35,6 +67,22 @@ export default function Index() {
     initializeDashboard(user.id);
   }, [user?.id, initializeDashboard]);
 
+  // ============================================================
+  // RESTAURATION DE LA COMMANDE LOCALE
+  // ============================================================
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    hydrateOrder();
+  }, [user?.id, hydrateOrder]);
+
+  // ============================================================
+  // REFRESH
+  // ============================================================
+
   const handleRefresh = useCallback(async () => {
     if (!user?.id) {
       return;
@@ -43,19 +91,39 @@ export default function Index() {
     try {
       await refreshDashboard(user.id);
     } catch {
-      // Le store conserve le cache existant en cas d'erreur réseau.
+      // Le store conserve le cache existant
+      // en cas d'erreur réseau.
     }
   }, [user?.id, refreshDashboard]);
 
-  /*
-   * Pour l'instant, la commande locale n'est pas encore branchée ici.
-   *
-   * Lorsque le store de commande sera intégré, cette valeur viendra
-   * directement du store local.
-   */
-  const currentOrder = useMemo(() => {
-    return null;
-  }, []);
+  // ============================================================
+  // COMMANDE EN COURS
+  // ============================================================
+  //
+  // La commande est conservée localement dans AsyncStorage
+  // via order.store.
+  //
+  // itemCount = quantité totale de produits
+  // totalAmount = somme des prix × quantités
+  //
+  // Si aucune commande active n'existe :
+  // currentOrder = null
+  //
+
+  const currentOrder = hasActiveOrder
+    ? {
+        itemCount: cart.reduce((total, item) => total + item.quantity, 0),
+
+        totalAmount: cart.reduce(
+          (total, item) => total + item.unitPrice * item.quantity,
+          0,
+        ),
+      }
+    : null;
+
+  // ============================================================
+  // USER NON DISPONIBLE
+  // ============================================================
 
   if (!user) {
     return null;
@@ -64,6 +132,10 @@ export default function Index() {
   const firstName = user.name.trim().split(" ")[0] || "Utilisateur";
 
   const showInitialLoader = isLoading && !dashboard;
+
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
@@ -94,7 +166,10 @@ export default function Index() {
         ) : dashboard ? (
           <>
             {dashboard.role === "MANAGER" ? (
-              <ManagerDashboard dashboard={dashboard} />
+              <ManagerDashboard
+                dashboard={dashboard}
+                currentOrder={currentOrder}
+              />
             ) : (
               <EmployeeDashboard
                 dashboard={dashboard}
@@ -131,7 +206,8 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.neutral,
-    paddingBottom: 60,
+    paddingBottom: 80,
+    paddingTop: 10,
   },
 
   scrollContent: {
