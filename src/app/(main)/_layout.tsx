@@ -174,6 +174,11 @@ const MainLayout = () => {
               <TabIcon focused={focused} icon="settings" />
             ),
           }}
+          listeners={{
+            tabPress: () => {
+              router.replace("/settings");
+            },
+          }}
         />
       </Tabs>
       <StatusBar
